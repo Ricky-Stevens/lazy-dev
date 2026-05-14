@@ -60,11 +60,15 @@ export function acquireRunLock(runDir) {
 			}
 		}
 
-		// Busy-wait spin loop: Bun has no synchronous sleep alternative for
-		// advisory locks, so we spin for LOCK_RETRY_MS between acquire attempts.
-		const until = Date.now() + LOCK_RETRY_MS;
-		while (Date.now() < until) {
-			// intentionally empty — see comment above
+		// Yield between acquire attempts. Use Bun.sleepSync when available;
+		// fall back to a busy-spin only outside Bun (e.g. plain Node test runners).
+		if (typeof Bun !== "undefined" && Bun.sleepSync) {
+			Bun.sleepSync(LOCK_RETRY_MS);
+		} else {
+			const until = Date.now() + LOCK_RETRY_MS;
+			while (Date.now() < until) {
+				// busy-spin fallback for non-Bun environments
+			}
 		}
 	}
 

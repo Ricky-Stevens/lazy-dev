@@ -152,6 +152,26 @@ describe("reviewBuild", () => {
 		expect(() => reviewBuild({ runId: "run-rb6", projectDir: pd })).toThrow("tasks.json missing");
 	});
 
+	test("throws a clear error when tasks.json contains corrupt JSON (#12)", () => {
+		const pd = join(tmpDir, "rb-corrupt");
+		const runDir = join(pd, ".lazy-dev", "runs", "run-corrupt");
+		mkdirSync(runDir, { recursive: true });
+		writeFileSync(join(runDir, "tasks.json"), "{ not valid json !!!");
+
+		expect(() => reviewBuild({ runId: "run-corrupt", projectDir: pd })).toThrow(/invalid JSON/i);
+	});
+
+	test("throws a clear error when tasks.json exceeds the size cap (#12)", () => {
+		const pd = join(tmpDir, "rb-oversized");
+		const runDir = join(pd, ".lazy-dev", "runs", "run-oversized");
+		mkdirSync(runDir, { recursive: true });
+		// Write a file larger than JSON_MAX_BYTES (4 MiB).
+		const big = Buffer.alloc(4 * 1024 * 1024 + 1, "x");
+		writeFileSync(join(runDir, "tasks.json"), big);
+
+		expect(() => reviewBuild({ runId: "run-oversized", projectDir: pd })).toThrow(/byte cap/i);
+	});
+
 	test("validates run_id", () => {
 		expect(() => reviewBuild({ runId: "../bad", projectDir: tmpDir })).toThrow();
 	});

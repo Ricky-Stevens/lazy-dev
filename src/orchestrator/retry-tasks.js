@@ -16,9 +16,9 @@
 
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { atomicWrite } from "../mcp/_io.js";
+import { atomicWrite, readJsonBounded } from "../mcp/_io.js";
 import { withRunLock } from "../mcp/_lock.js";
-import { requireSafeId, requireSafeIdArray } from "../mcp/_validation.js";
+import { JSON_MAX_BYTES, requireSafeId, requireSafeIdArray } from "../mcp/_validation.js";
 
 export function retryTasks({ runId, taskIds, projectDir }) {
 	requireSafeId(runId, "run_id");
@@ -38,7 +38,10 @@ export function retryTasks({ runId, taskIds, projectDir }) {
 			if (!existsSync(envelopePath)) {
 				throw new Error(`envelope missing for task ${taskId}`);
 			}
-			const envelope = JSON.parse(readFileSync(envelopePath, "utf8"));
+			const envelope = readJsonBounded(envelopePath, JSON_MAX_BYTES);
+			if (envelope === null) {
+				throw new Error(`envelope missing or unreadable for task ${taskId}`);
+			}
 			envelope.reviewer_notes =
 				perTaskNotes[taskId] || "See review.md for reviewer findings on this task.";
 			atomicWrite(envelopePath, JSON.stringify(envelope, null, 2));
@@ -59,7 +62,7 @@ export function retryTasks({ runId, taskIds, projectDir }) {
 		}
 
 		const statusPath = join(runDir, "status.json");
-		const status = existsSync(statusPath) ? JSON.parse(readFileSync(statusPath, "utf8")) : {};
+		const status = readJsonBounded(statusPath, JSON_MAX_BYTES) ?? {};
 		status.phase = "specialists";
 		atomicWrite(statusPath, JSON.stringify(status, null, 2));
 
