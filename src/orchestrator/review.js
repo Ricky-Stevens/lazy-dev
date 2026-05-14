@@ -40,12 +40,13 @@ export function reviewBuild({ runId, projectDir, effort = "high" }) {
 		throw new IOError(`tasks.json missing or unreadable at ${tasksJsonPath}`);
 	}
 	const tasks = tasksJson?.tasks || [];
+	const gitAvailable = isGitRepo(projectDir);
 	const tasksWithDiffs = [];
 	for (const t of tasks) {
 		const worktreePath = findWorktreePath(projectDir, runId, t.id);
 		const diffPatch = join(runDir, "tasks", t.id, "diff.patch");
 		if (worktreePath) {
-			writeDiffPatch(worktreePath, diffPatch);
+			writeDiffPatch(worktreePath, diffPatch, gitAvailable);
 		}
 		const sentinelPath = findSentinelPath(runDir, t.id);
 		const sentinelSummary = sentinelPath ? readSentinelSummary(sentinelPath) : null;
@@ -121,9 +122,9 @@ function resolveBaseRef(worktreePath) {
 	}
 }
 
-function writeDiffPatch(worktreePath, diffPatch) {
+function writeDiffPatch(worktreePath, diffPatch, gitAvailable) {
 	try {
-		if (isGitRepo(worktreePath)) {
+		if (gitAvailable) {
 			const baseRef = resolveBaseRef(worktreePath);
 			const diffArgs = baseRef ? ["diff", `${baseRef}...HEAD`] : ["diff", "HEAD~1...HEAD"];
 			const diff = execFileSync("git", diffArgs, {
