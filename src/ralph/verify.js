@@ -22,11 +22,18 @@ function isPathTraversal(p) {
 	return p.startsWith("/") || p.includes("/../") || p.startsWith("../") || join(p).includes("..");
 }
 
-export function runVerifiers({ criteria, cwd, scopeAllowedPaths = [], gitBaseRef, projectDir }) {
+export function runVerifiers({
+	criteria,
+	cwd,
+	scopeAllowedPaths = [],
+	gitBaseRef,
+	projectDir,
+	precomputedDiff = null,
+}) {
 	const results = [];
 	for (const c of criteria) {
 		try {
-			results.push(runOne(c, { cwd, scopeAllowedPaths, gitBaseRef, projectDir }));
+			results.push(runOne(c, { cwd, scopeAllowedPaths, gitBaseRef, projectDir, precomputedDiff }));
 		} catch (err) {
 			results.push({
 				id: c.id,
@@ -224,7 +231,7 @@ function runFileExists(c, { cwd }) {
 	};
 }
 
-function runDiffScope(c, { cwd, scopeAllowedPaths, gitBaseRef }) {
+function runDiffScope(c, { cwd, scopeAllowedPaths, gitBaseRef, precomputedDiff }) {
 	if (!gitBaseRef) {
 		return {
 			id: c.id,
@@ -234,24 +241,28 @@ function runDiffScope(c, { cwd, scopeAllowedPaths, gitBaseRef }) {
 		};
 	}
 	let changed = [];
-	try {
-		const out = execFileSync("git", ["diff", "--name-only", `${gitBaseRef}...HEAD`], {
-			cwd,
-			encoding: "utf8",
-			timeout: 30_000,
-			maxBuffer: 10 * 1024 * 1024,
-		});
-		changed = out
-			.split("\n")
-			.map((s) => s.trim())
-			.filter(Boolean);
-	} catch (err) {
-		return {
-			id: c.id,
-			kind: c.kind,
-			passed: false,
-			details: `git diff failed: ${err.message}`,
-		};
+	if (precomputedDiff) {
+		changed = precomputedDiff;
+	} else {
+		try {
+			const out = execFileSync("git", ["diff", "--name-only", `${gitBaseRef}...HEAD`], {
+				cwd,
+				encoding: "utf8",
+				timeout: 30_000,
+				maxBuffer: 10 * 1024 * 1024,
+			});
+			changed = out
+				.split("\n")
+				.map((s) => s.trim())
+				.filter(Boolean);
+		} catch (err) {
+			return {
+				id: c.id,
+				kind: c.kind,
+				passed: false,
+				details: `git diff failed: ${err.message}`,
+			};
+		}
 	}
 
 	const G = getBunGlob();
