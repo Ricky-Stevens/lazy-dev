@@ -6,18 +6,23 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { getBunGlob } from "./bun-glob.js";
 import { cheapHash } from "./hash.js";
 
 // Strategy 1: specialist includes task_id in the sentinel body.
 export function resolveFromSentinel(projectDir, parsed) {
 	if (parsed.kind !== "completed" || !parsed.body?.task_id) return null;
 	const taskId = parsed.body.task_id;
+	if (typeof taskId !== "string" || !/^[\w.:-]+$/.test(taskId)) return null;
 	const runsDir = join(projectDir, ".lazy-dev", "runs");
 	if (!existsSync(runsDir)) return null;
-	for (const r of readdirSync(runsDir)) {
-		if (r.startsWith("_")) continue;
-		const envPath = join(runsDir, r, "tasks", taskId, "envelope.json");
-		if (existsSync(envPath)) return { runId: r, taskId };
+	const entries = readdirSync(runsDir)
+		.filter((e) => !e.startsWith("_"))
+		.map((e) => ({ e, mt: statSync(join(runsDir, e)).mtimeMs }))
+		.sort((a, b) => b.mt - a.mt);
+	for (const { e } of entries) {
+		const envPath = join(runsDir, e, "tasks", taskId, "envelope.json");
+		if (existsSync(envPath)) return { runId: e, taskId };
 	}
 	return null;
 }
@@ -155,8 +160,8 @@ export function checkScope(worktree, gitBaseRef, allowedPaths) {
 			.map((s) => s.trim())
 			.filter(Boolean);
 
-		const G = typeof Bun !== "undefined" && Bun.Glob ? Bun.Glob : null;
-		if (G && changedFiles.length > 0) {
+		if (changedFiles.length > 0) {
+			const G = getBunGlob();
 			const allowed = allowedPaths.map((p) => new G(p));
 			const outside = changedFiles.filter((f) => !allowed.some((g) => g.match(f)));
 			if (outside.length > 0) return { diffHash, violation: outside };

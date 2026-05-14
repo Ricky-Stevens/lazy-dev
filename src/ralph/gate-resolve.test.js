@@ -143,6 +143,75 @@ describe("deriveWorktreePath", () => {
 	});
 });
 
+describe("resolveFromSentinel — SAFE_ID_REGEX guard", () => {
+	test("rejects task_id containing path traversal characters", () => {
+		const result = resolveFromSentinel(tmpDir, {
+			kind: "completed",
+			body: { task_id: "../evil" },
+		});
+		expect(result).toBe(null);
+	});
+
+	test("rejects task_id with a slash", () => {
+		const result = resolveFromSentinel(tmpDir, {
+			kind: "completed",
+			body: { task_id: "run/T-0001" },
+		});
+		expect(result).toBe(null);
+	});
+
+	test("rejects task_id with a space", () => {
+		const result = resolveFromSentinel(tmpDir, {
+			kind: "completed",
+			body: { task_id: "T 0001" },
+		});
+		expect(result).toBe(null);
+	});
+
+	test("accepts task_id with word chars, dots, colons, and hyphens", () => {
+		const runId = "run-safe-id";
+		const taskId = "T-0001.v2:x";
+		const envDir = join(tmpDir, ".lazy-dev", "runs", runId, "tasks", taskId);
+		mkdirSync(envDir, { recursive: true });
+		writeFileSync(join(envDir, "envelope.json"), "{}");
+
+		const result = resolveFromSentinel(tmpDir, {
+			kind: "completed",
+			body: { task_id: taskId },
+		});
+		expect(result).toEqual({ runId, taskId });
+	});
+});
+
+describe("resolveFromSentinel — picks most-recent run", () => {
+	test("returns the most recently modified run when two runs share the same taskId", () => {
+		const pd = join(tmpDir, "multi-run");
+		const taskId = "T-shared";
+
+		const oldRun = "run-2020";
+		const newRun = "run-2025";
+
+		for (const r of [oldRun, newRun]) {
+			const envDir = join(pd, ".lazy-dev", "runs", r, "tasks", taskId);
+			mkdirSync(envDir, { recursive: true });
+			writeFileSync(join(envDir, "envelope.json"), "{}");
+		}
+
+		// Force old-run to appear older via mtime on the run dir itself.
+		utimesSync(
+			join(pd, ".lazy-dev", "runs", oldRun),
+			new Date("2020-01-01"),
+			new Date("2020-01-01"),
+		);
+
+		const result = resolveFromSentinel(pd, {
+			kind: "completed",
+			body: { task_id: taskId },
+		});
+		expect(result).toEqual({ runId: newRun, taskId });
+	});
+});
+
 describe("findMostRecentRun", () => {
 	test("finds the most recently modified run", () => {
 		const pd = join(tmpDir, "find-recent");

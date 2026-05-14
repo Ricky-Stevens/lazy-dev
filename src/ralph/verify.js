@@ -15,6 +15,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { tail } from "../mcp/_io.js";
+import { getBunGlob } from "./bun-glob.js";
 import { cheapHash } from "./hash.js";
 
 function isPathTraversal(p) {
@@ -284,12 +285,4 @@ function resolveVerifierOverride(cmd, projectDir) {
 	const script = join(projectDir, ".lazy-dev", "verifiers", `${firstToken}.sh`);
 	if (!existsSync(script)) return null;
 	return { script, args: tokens.slice(1) };
-}
-
-// Bun.Glob if running under Bun; throws in non-Bun contexts.
-// A silent stub would cause in_glob verifiers to match zero files and
-// produce incorrect results without any diagnostic.
-function getBunGlob() {
-	if (typeof Bun !== "undefined" && Bun.Glob) return Bun.Glob;
-	throw new Error("Bun.Glob is required for glob verifiers but Bun is not available");
 }
