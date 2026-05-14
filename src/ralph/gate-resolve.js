@@ -137,6 +137,9 @@ export function resolveBaseRef(worktree, envelope) {
 export function checkScope(worktree, gitBaseRef, allowedPaths) {
 	if (!gitBaseRef) return { diffHash: null, violation: null, _changedFiles: null };
 	try {
+		// Single git call: get full diff (for hash) and extract file names from
+		// diff headers (--- a/... / +++ b/...) instead of running a second
+		// --name-only command.
 		const diffOut = execFileSync("git", ["diff", `${gitBaseRef}...HEAD`], {
 			cwd: worktree,
 			encoding: "utf8",
@@ -145,15 +148,14 @@ export function checkScope(worktree, gitBaseRef, allowedPaths) {
 		});
 		const diffHash = cheapHash(diffOut);
 
-		const changedFiles = execFileSync("git", ["diff", "--name-only", `${gitBaseRef}...HEAD`], {
-			cwd: worktree,
-			encoding: "utf8",
-			timeout: 30_000,
-			maxBuffer: 10 * 1024 * 1024,
-		})
-			.split("\n")
-			.map((s) => s.trim())
-			.filter(Boolean);
+		const fileSet = new Set();
+		for (const line of diffOut.split("\n")) {
+			if (line.startsWith("diff --git a/")) {
+				const bIdx = line.lastIndexOf(" b/");
+				if (bIdx > 0) fileSet.add(line.slice(bIdx + 3));
+			}
+		}
+		const changedFiles = [...fileSet];
 
 		if (allowedPaths.length === 0)
 			return { diffHash, violation: null, _changedFiles: changedFiles };
