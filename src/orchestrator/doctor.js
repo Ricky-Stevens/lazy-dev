@@ -8,11 +8,22 @@
 // CLI: node src/orchestrator/doctor.js [run-id]
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import {
+	closeSync,
+	existsSync,
+	openSync,
+	readdirSync,
+	readFileSync,
+	readSync,
+	statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { readJsonSafe } from "../mcp/_io.js";
 import { DOCTOR_MAX_TASKS, DOCTOR_OUTPUT_MAX_BYTES, requireSafeId } from "../mcp/_validation.js";
 
+const PAYLOAD_PREVIEW_BYTES = 1024;
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: diagnostic dump function with many reporting branches; splitting would obscure the sequential report structure
 export function doctor({ runId, projectDir } = {}) {
 	const pd = projectDir || process.env.CLAUDE_PROJECT_DIR || process.cwd();
 	const runsDir = join(pd, ".lazy-dev", "runs");
@@ -52,7 +63,12 @@ export function doctor({ runId, projectDir } = {}) {
 			const td = join(tasksDir, tid);
 			const marks = [];
 			if (existsSync(join(td, "APPROVED"))) marks.push("APPROVED");
-			if (existsSync(join(td, "FAILED"))) marks.push("FAILED");
+			let failReason = null;
+			if (existsSync(join(td, "FAILED"))) {
+				marks.push("FAILED");
+				const failData = readJsonSafe(join(td, "FAILED"));
+				failReason = failData?.reason || null;
+			}
 			if (existsSync(join(td, "RETRY"))) marks.push("RETRY");
 			if (existsSync(join(td, "envelope.json"))) marks.push("envelope");
 			const state = readJsonSafe(join(td, "state.json"));
@@ -64,8 +80,9 @@ export function doctor({ runId, projectDir } = {}) {
 				? statSync(join(td, "diff.patch")).size
 				: 0;
 			const wall = formatWallClock(state?.dispatched_at, state?.completed_at);
+			const reasonSuffix = failReason ? ` reason=${failReason}` : "";
 			lines.push(
-				`- ${tid}: [${marks.join(", ") || "—"}] iter=${iter} diff=${diffSize}B failing=${lastFail} wall=${wall}`,
+				`- ${tid}: [${marks.join(", ") || "—"}] iter=${iter} diff=${diffSize}B failing=${lastFail} wall=${wall}${reasonSuffix}`,
 			);
 		}
 		lines.push("");
@@ -90,8 +107,13 @@ export function doctor({ runId, projectDir } = {}) {
 		if (payloads.length) {
 			lines.push("## recent gate payloads");
 			for (const p of payloads) {
-				const raw = readFileSync(join(gateLogDir, p), "utf8").trim();
-				const short = raw.length > 400 ? `${raw.slice(0, 400)}…` : raw;
+				const filePath = join(gateLogDir, p);
+				const fd = openSync(filePath, "r");
+				const buf = Buffer.alloc(PAYLOAD_PREVIEW_BYTES);
+				const bytesRead = readSync(fd, buf, 0, PAYLOAD_PREVIEW_BYTES, 0);
+				closeSync(fd);
+				const raw = buf.toString("utf8", 0, bytesRead).trim();
+				const short = bytesRead >= PAYLOAD_PREVIEW_BYTES ? `${raw}…` : raw;
 				lines.push(`- ${p}`);
 				lines.push(`  ${short}`);
 			}
