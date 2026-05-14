@@ -9,16 +9,32 @@ import { join } from "node:path";
 import { getBunGlob } from "./bun-glob.js";
 import { cheapHash } from "./hash.js";
 
-// Strategy 1: specialist includes task_id in the sentinel body.
+// Strategy 1: specialist includes task_id (and optionally run_id) in the sentinel body.
 export function resolveFromSentinel(projectDir, parsed) {
 	if (parsed.kind !== "completed" || !parsed.body?.task_id) return null;
 	const taskId = parsed.body.task_id;
 	if (typeof taskId !== "string" || !/^[\w.:-]+$/.test(taskId)) return null;
 	const runsDir = join(projectDir, ".lazy-dev", "runs");
 	if (!existsSync(runsDir)) return null;
+
+	// Fast path: if the sentinel includes run_id, resolve in O(1).
+	const runIdHint = parsed.body.run_id;
+	if (runIdHint && typeof runIdHint === "string" && /^[\w.:-]+$/.test(runIdHint)) {
+		const envPath = join(runsDir, runIdHint, "tasks", taskId, "envelope.json");
+		if (existsSync(envPath)) return { runId: runIdHint, taskId };
+	}
+
+	// Slow path: scan run directories sorted by mtime descending.
 	const entries = readdirSync(runsDir)
 		.filter((e) => !e.startsWith("_"))
-		.map((e) => ({ e, mt: statSync(join(runsDir, e)).mtimeMs }))
+		.map((e) => {
+			try {
+				return { e, mt: statSync(join(runsDir, e)).mtimeMs };
+			} catch {
+				return null;
+			}
+		})
+		.filter(Boolean)
 		.sort((a, b) => b.mt - a.mt);
 	for (const { e } of entries) {
 		const envPath = join(runsDir, e, "tasks", taskId, "envelope.json");
