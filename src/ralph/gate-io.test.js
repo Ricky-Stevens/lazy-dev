@@ -166,9 +166,7 @@ describe("readStdinJson — stdin cap", () => {
 		// At most one payload file should be written (no double-log)
 		const logDir = join(pd, ".lazy-dev", "runs", "_gate-log");
 		if (existsSync(logDir)) {
-			const files = Array.from(
-				new Bun.Glob("*.payload.json").scanSync({ cwd: logDir }),
-			);
+			const files = Array.from(new Bun.Glob("*.payload.json").scanSync({ cwd: logDir }));
 			expect(files.length).toBeLessThanOrEqual(1);
 		}
 

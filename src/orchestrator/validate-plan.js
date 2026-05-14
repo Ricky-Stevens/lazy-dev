@@ -30,6 +30,7 @@ const VALID_AGENTS = new Set([
 	"format",
 ]);
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: plan validation checks many interdependent constraints (agent names, paths, deps, scopes); splitting would scatter related checks across files
 export function validatePlan(plan, options = {}) {
 	const errors = [];
 	const forbiddenGlobal = options.forbiddenPathsGlobal || [];

@@ -121,9 +121,9 @@ describe("retryTasks", () => {
 		const big = Buffer.alloc(4 * 1024 * 1024 + 1, "x");
 		writeFileSync(join(taskDir, "envelope.json"), big);
 
-		expect(() =>
-			retryTasks({ runId: "run-big-env", taskIds: ["T-0001"], projectDir: pd }),
-		).toThrow(/byte cap/i);
+		expect(() => retryTasks({ runId: "run-big-env", taskIds: ["T-0001"], projectDir: pd })).toThrow(
+			/byte cap/i,
+		);
 	});
 
 	test("validates run_id", () => {
