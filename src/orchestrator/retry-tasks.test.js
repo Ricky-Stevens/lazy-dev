@@ -99,6 +99,33 @@ describe("retryTasks", () => {
 		);
 	});
 
+	test("throws a clear error on corrupt envelope.json (#12)", () => {
+		const pd = join(tmpDir, "r-corrupt-env");
+		const runDir = join(pd, ".lazy-dev", "runs", "run-corrupt-env");
+		const taskDir = join(runDir, "tasks", "T-0001");
+		mkdirSync(taskDir, { recursive: true });
+		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
+		writeFileSync(join(taskDir, "envelope.json"), "{ bad json !!!");
+
+		expect(() =>
+			retryTasks({ runId: "run-corrupt-env", taskIds: ["T-0001"], projectDir: pd }),
+		).toThrow(/invalid JSON/i);
+	});
+
+	test("throws a clear error on oversized envelope.json (#12)", () => {
+		const pd = join(tmpDir, "r-big-env");
+		const runDir = join(pd, ".lazy-dev", "runs", "run-big-env");
+		const taskDir = join(runDir, "tasks", "T-0001");
+		mkdirSync(taskDir, { recursive: true });
+		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
+		const big = Buffer.alloc(4 * 1024 * 1024 + 1, "x");
+		writeFileSync(join(taskDir, "envelope.json"), big);
+
+		expect(() =>
+			retryTasks({ runId: "run-big-env", taskIds: ["T-0001"], projectDir: pd }),
+		).toThrow(/byte cap/i);
+	});
+
 	test("validates run_id", () => {
 		expect(() =>
 			retryTasks({ runId: "../escape", taskIds: ["T-0001"], projectDir: tmpDir }),

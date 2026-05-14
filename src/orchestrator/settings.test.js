@@ -90,6 +90,22 @@ describe("resolveSettings", () => {
 		const r = resolveSettings(projectDir);
 		expect(r.routing.confirm_before).toEqual(["feature"]);
 	});
+
+	test("plain-object over array-base leaves the array unchanged (#13)", () => {
+		// A misconfigured settings file that puts an object where an array is
+		// expected (e.g. forbidden_paths_global: { … }) must not corrupt the
+		// base array — mergeDeep should return base unchanged in that case.
+		mkdirSync(join(projectDir, ".lazy-dev"), { recursive: true });
+		writeFileSync(
+			join(projectDir, ".lazy-dev", "settings.json"),
+			JSON.stringify({
+				safety: { forbidden_paths_global: { accidentally: "an object" } },
+			}),
+		);
+		const r = resolveSettings(projectDir);
+		expect(Array.isArray(r.safety.forbidden_paths_global)).toBe(true);
+		expect(r.safety.forbidden_paths_global).toEqual(DEFAULTS.safety.forbidden_paths_global);
+	});
 });
 
 describe("snapshotForRun + readRunConfig", () => {

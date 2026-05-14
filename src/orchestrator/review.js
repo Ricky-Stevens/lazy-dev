@@ -13,8 +13,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { atomicWrite } from "../mcp/_io.js";
-import { requireSafeId } from "../mcp/_validation.js";
+import { atomicWrite, IOError, readJsonBounded } from "../mcp/_io.js";
+import { JSON_MAX_BYTES, requireSafeId } from "../mcp/_validation.js";
 import { parsePerTaskVerdicts } from "../shared/parse-verdicts.js";
 
 // Canonical effort ladder for the reviewer. Bare `lazy-dev:reviewer` is "high"
@@ -35,50 +35,17 @@ export function reviewBuild({ runId, projectDir, effort = "high" }) {
 	if (!existsSync(tasksJsonPath)) {
 		throw new Error(`tasks.json missing at ${tasksJsonPath}`);
 	}
-	const tasks = JSON.parse(readFileSync(tasksJsonPath, "utf8"))?.tasks || [];
+	const tasksJson = readJsonBounded(tasksJsonPath, JSON_MAX_BYTES);
+	if (tasksJson === null) {
+		throw new IOError(`tasks.json missing or unreadable at ${tasksJsonPath}`);
+	}
+	const tasks = tasksJson?.tasks || [];
 	const tasksWithDiffs = [];
 	for (const t of tasks) {
 		const worktreePath = findWorktreePath(projectDir, runId, t.id);
 		const diffPatch = join(runDir, "tasks", t.id, "diff.patch");
 		if (worktreePath) {
-			try {
-				if (isGitRepo(worktreePath)) {
-					let baseRef;
-					try {
-						baseRef = execFileSync("git", ["merge-base", "HEAD", "@{upstream}"], {
-							cwd: worktreePath,
-							encoding: "utf8",
-							timeout: 30_000,
-						}).trim();
-					} catch {
-						try {
-							baseRef = execFileSync("git", ["rev-parse", "HEAD~1"], {
-								cwd: worktreePath,
-								encoding: "utf8",
-								timeout: 30_000,
-							}).trim();
-						} catch {
-							baseRef = null;
-						}
-					}
-					const diffArgs = baseRef ? ["diff", `${baseRef}...HEAD`] : ["diff", "HEAD~1...HEAD"];
-					const diff = execFileSync("git", diffArgs, {
-						cwd: worktreePath,
-						encoding: "utf8",
-						timeout: 60_000,
-						maxBuffer: 10 * 1024 * 1024,
-					});
-					writeFileSync(diffPatch, diff);
-				} else {
-					const files = listWorktreeFiles(worktreePath);
-					writeFileSync(
-						diffPatch,
-						`# Non-git worktree — file listing (read files directly for content)\n${files.join("\n")}\n`,
-					);
-				}
-			} catch {
-				writeFileSync(diffPatch, "");
-			}
+			writeDiffPatch(worktreePath, diffPatch);
 		}
 		const sentinelPath = findSentinelPath(runDir, t.id);
 		const sentinelSummary = sentinelPath ? readSentinelSummary(sentinelPath) : null;
@@ -132,6 +99,50 @@ export function reviewVerdict({ runId, projectDir }) {
 	if (!vm) throw new Error("could not parse Verdict line");
 	const per_task = parsePerTaskVerdicts(md);
 	return { verdict: vm[1].toUpperCase(), per_task };
+}
+
+function resolveBaseRef(worktreePath) {
+	try {
+		return execFileSync("git", ["merge-base", "HEAD", "@{upstream}"], {
+			cwd: worktreePath,
+			encoding: "utf8",
+			timeout: 30_000,
+		}).trim();
+	} catch {
+		try {
+			return execFileSync("git", ["rev-parse", "HEAD~1"], {
+				cwd: worktreePath,
+				encoding: "utf8",
+				timeout: 30_000,
+			}).trim();
+		} catch {
+			return null;
+		}
+	}
+}
+
+function writeDiffPatch(worktreePath, diffPatch) {
+	try {
+		if (isGitRepo(worktreePath)) {
+			const baseRef = resolveBaseRef(worktreePath);
+			const diffArgs = baseRef ? ["diff", `${baseRef}...HEAD`] : ["diff", "HEAD~1...HEAD"];
+			const diff = execFileSync("git", diffArgs, {
+				cwd: worktreePath,
+				encoding: "utf8",
+				timeout: 60_000,
+				maxBuffer: 10 * 1024 * 1024,
+			});
+			writeFileSync(diffPatch, diff);
+		} else {
+			const files = listWorktreeFiles(worktreePath);
+			writeFileSync(
+				diffPatch,
+				`# Non-git worktree — file listing (read files directly for content)\n${files.join("\n")}\n`,
+			);
+		}
+	} catch {
+		writeFileSync(diffPatch, "");
+	}
 }
 
 function findWorktreePath(projectDir, runId, taskId) {

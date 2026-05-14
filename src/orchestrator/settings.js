@@ -123,6 +123,8 @@ function extract(obj, key) {
 function mergeDeep(base, over) {
 	if (over === null || typeof over !== "object") return base;
 	if (Array.isArray(over)) return [...over]; // arrays are replaced, not merged
+	// Plain object over an array base: leave the base array unchanged.
+	if (Array.isArray(base) && !Array.isArray(over)) return base;
 	const out = Array.isArray(base) ? {} : { ...base };
 	for (const k of Object.keys(over)) {
 		const b = out[k];
@@ -136,6 +138,9 @@ function mergeDeep(base, over) {
 			!Array.isArray(o)
 		) {
 			out[k] = mergeDeep(b, o);
+		} else if (Array.isArray(b) && o !== null && typeof o === "object" && !Array.isArray(o)) {
+			// Plain object must not overwrite an array base — leave base unchanged.
+			out[k] = b;
 		} else {
 			out[k] = o;
 		}

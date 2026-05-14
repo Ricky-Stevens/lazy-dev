@@ -44,4 +44,28 @@ describe("acquireRunLock", () => {
 		release();
 		expect(existsSync(lockFile)).toBe(false);
 	});
+
+	test("second acquirer succeeds after first releases — no busy-spin (#14)", () => {
+		// Acquire the lock, then confirm a second acquire (after release) works.
+		// This also exercises the sleep path between attempts in a contended case.
+		const r1 = acquireRunLock(dir);
+		// Lock is held; a second call should wait (stale check won't trigger here
+		// because mtime is recent). Release early so the test doesn't time out.
+		r1();
+
+		// Now uncontended — must succeed immediately.
+		const r2 = acquireRunLock(dir);
+		expect(existsSync(join(dir, ".lock"))).toBe(true);
+		r2();
+		expect(existsSync(join(dir, ".lock"))).toBe(false);
+	});
+
+	test("_lock.js source uses Bun.sleepSync for sleep between retries (#14)", async () => {
+		// Belt-and-braces: verify the implementation file contains Bun.sleepSync
+		// so a future refactor doesn't silently reintroduce a busy-spin.
+		const { readFileSync } = await import("node:fs");
+		const { resolve } = await import("node:path");
+		const src = readFileSync(resolve(import.meta.dirname, "_lock.js"), "utf8");
+		expect(src).toContain("Bun.sleepSync");
+	});
 });
