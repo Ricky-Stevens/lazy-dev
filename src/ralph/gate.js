@@ -15,7 +15,14 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { buildRetryPrompt, emitRetry, logDebug, readEnvelope, readStdinJson } from "./gate-io.js";
+import {
+	buildRetryPrompt,
+	emitRetry,
+	logDebug,
+	logPayload,
+	readEnvelope,
+	readStdinJson,
+} from "./gate-io.js";
 import {
 	checkScope,
 	deriveWorktreePath,
@@ -94,6 +101,10 @@ async function main() {
 	const payloadCwd = payload.cwd || projectDir;
 
 	if (!agentType.startsWith("lazy-dev:")) return;
+
+	// Only log payloads for lazy-dev agents — avoids disk I/O on every
+	// non-lazy-dev SubagentStop in the project.
+	logPayload(projectDir, payload);
 
 	const bareAgentName = agentType.slice("lazy-dev:".length);
 	const isPerRun = isPerRunAgent(bareAgentName);
@@ -188,7 +199,7 @@ async function main() {
 	}
 
 	// 2. AUTO-COMMIT FALLBACK
-	autoCommit(projectDir, runId, taskId, log);
+	autoCommit(projectDir, runId, taskId, worktree, log);
 
 	// 3. SCOPE + DIFF HASH
 	const gitBaseRef = resolveBaseRef(worktree, envelope);
@@ -287,8 +298,17 @@ function locateEnvelope(projectDir, runId, taskId) {
 	return null;
 }
 
-function autoCommit(projectDir, runId, taskId, log) {
+function autoCommit(projectDir, runId, taskId, worktree, log) {
 	try {
+		// Quick check: if git status is clean, skip the subprocess entirely.
+		// This is the common case — specialists almost always commit.
+		const statusOut = execFileSync("git", ["status", "--porcelain"], {
+			cwd: worktree,
+			encoding: "utf8",
+			timeout: 10_000,
+		}).trim();
+		if (!statusOut) return;
+
 		const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
 		const commitOut = execFileSync(
 			"bash",
