@@ -9,11 +9,27 @@ const task = (id, depends_on = []) => ({
 });
 
 describe("scheduleNext", () => {
-	test("dispatches all independent tasks up to maxParallel", () => {
+	test("auto-scales to dispatch all independent tasks beyond maxParallel", () => {
 		const tasks = [task("T-0001"), task("T-0002"), task("T-0003"), task("T-0004")];
 		const r = scheduleNext({ tasks, statuses: {}, maxParallel: 3 });
 		expect(r.kind).toBe("dispatch");
-		expect(r.ids).toEqual(["T-0001", "T-0002", "T-0003"]);
+		expect(r.ids).toEqual(["T-0001", "T-0002", "T-0003", "T-0004"]);
+	});
+
+	test("respects maxParallel when some tasks have dependencies", () => {
+		const tasks = [
+			task("T-0001"),
+			task("T-0002", ["T-0001"]),
+			task("T-0003", ["T-0001"]),
+			task("T-0004", ["T-0001"]),
+		];
+		const r = scheduleNext({
+			tasks,
+			statuses: { "T-0001": "approved" },
+			maxParallel: 2,
+		});
+		expect(r.kind).toBe("dispatch");
+		expect(r.ids).toEqual(["T-0002", "T-0003"]);
 	});
 
 	test("respects depends_on ordering", () => {
@@ -45,10 +61,33 @@ describe("scheduleNext", () => {
 		expect(r.running).toEqual(["T-0001", "T-0002"]);
 	});
 
-	test("returns blocked on any failed task", () => {
+	test("independent tasks continue when an unrelated task fails", () => {
 		const tasks = [task("T-0001"), task("T-0002")];
 		const r = scheduleNext({
 			tasks,
+			statuses: { "T-0001": "failed" },
+			maxParallel: 3,
+		});
+		expect(r.kind).toBe("dispatch");
+		expect(r.ids).toEqual(["T-0002"]);
+	});
+
+	test("returns blocked when failed task has no viable peers left", () => {
+		const tasks = [task("T-0001")];
+		const r = scheduleNext({
+			tasks,
+			statuses: { "T-0001": "failed" },
+			maxParallel: 3,
+		});
+		expect(r.kind).toBe("blocked");
+		expect(r.failed).toEqual(["T-0001"]);
+	});
+
+	test("dependent task is blocked when its dependency fails", () => {
+		const t1 = task("T-0001");
+		const t2 = { ...task("T-0002"), depends_on: ["T-0001"] };
+		const r = scheduleNext({
+			tasks: [t1, t2],
 			statuses: { "T-0001": "failed" },
 			maxParallel: 3,
 		});
