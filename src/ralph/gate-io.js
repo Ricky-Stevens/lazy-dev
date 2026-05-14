@@ -7,10 +7,12 @@ import { dirname, join } from "node:path";
 import { readJsonSafe } from "../mcp/_io.js";
 
 const MAX_ENVELOPE_BYTES = 2 * 1024 * 1024;
+const MAX_STDIN_BYTES = 16 * 1024 * 1024;
 
 export async function readStdinJson(projectDir) {
 	return new Promise((resolve) => {
 		let buf = "";
+		let bytesReceived = 0;
 		let done = false;
 		const finish = (val) => {
 			if (!done) {
@@ -21,18 +23,14 @@ export async function readStdinJson(projectDir) {
 
 		process.stdin.setEncoding("utf8");
 		process.stdin.on("data", (d) => {
+			bytesReceived += Buffer.byteLength(d, "utf8");
+			if (bytesReceived > MAX_STDIN_BYTES) {
+				logDebug(projectDir, "stdin truncated: exceeded 16 MB cap");
+				return finish(null);
+			}
 			buf += d;
 		});
-		process.stdin.on("end", () => {
-			if (!buf.trim()) return finish(null);
-			logPayload(projectDir, buf);
-			try {
-				finish(JSON.parse(buf));
-			} catch {
-				finish(null);
-			}
-		});
-		setTimeout(() => {
+		const to = setTimeout(() => {
 			if (buf.trim()) {
 				logPayload(projectDir, buf);
 				try {
@@ -41,7 +39,18 @@ export async function readStdinJson(projectDir) {
 					finish(null);
 				}
 			} else finish(null);
-		}, 2000).unref?.();
+		}, 2000);
+		to.unref?.();
+		process.stdin.on("end", () => {
+			clearTimeout(to);
+			if (!buf.trim()) return finish(null);
+			logPayload(projectDir, buf);
+			try {
+				finish(JSON.parse(buf));
+			} catch {
+				finish(null);
+			}
+		});
 	});
 }
 

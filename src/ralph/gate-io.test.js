@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildRetryPrompt, logDebug, readEnvelope } from "./gate-io.js";
@@ -89,4 +89,89 @@ describe("logDebug", () => {
 		expect(content).toContain("test message 1");
 		expect(content).toContain("test message 2");
 	});
+});
+
+// Helper: resolve a path relative to this file's directory for spawning.
+const thisDir = join(import.meta.dir);
+
+describe("readStdinJson — stdin cap", () => {
+	// Spawn a child process that imports readStdinJson and pipes result to stdout.
+	// We verify via the debug log and exit code.
+	async function spawnWithStdin(projectDir, stdinData) {
+		const scriptPath = join(thisDir, "_test-stdin-helper.js");
+		const proc = Bun.spawn(["bun", "run", scriptPath, projectDir], {
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		proc.stdin.write(stdinData);
+		proc.stdin.end();
+		const exitCode = await proc.exited;
+		const out = await new Response(proc.stdout).text();
+		return { exitCode, out: out.trim() };
+	}
+
+	test("returns null and logs debug message when stdin exceeds 16 MB", async () => {
+		const pd = join(tmpDir, "cap-test");
+		mkdirSync(pd, { recursive: true });
+
+		// Write the helper script used by the subprocess
+		const helperPath = join(thisDir, "_test-stdin-helper.js");
+		writeFileSync(
+			helperPath,
+			[
+				'import { readStdinJson } from "./gate-io.js";',
+				"const result = await readStdinJson(process.argv[2]);",
+				'process.stdout.write(JSON.stringify(result) + "\\n");',
+			].join("\n"),
+		);
+
+		// Create a buffer just over 16 MB of non-JSON data
+		const overLimit = Buffer.alloc(16 * 1024 * 1024 + 100, "x");
+		const { out } = await spawnWithStdin(pd, overLimit);
+
+		// Result must be null
+		expect(out).toBe("null");
+
+		// Debug log must contain the truncation message
+		const debugLog = join(pd, ".lazy-dev", "runs", "_gate-log", "gate-debug.log");
+		expect(existsSync(debugLog)).toBe(true);
+		const logContent = readFileSync(debugLog, "utf8");
+		expect(logContent).toContain("stdin truncated: exceeded 16 MB cap");
+
+		// Clean up helper
+		rmSync(helperPath, { force: true });
+	}, 10000);
+
+	test("does not double-log when stdin ends before timeout fires", async () => {
+		const pd = join(tmpDir, "no-double-log");
+		mkdirSync(pd, { recursive: true });
+
+		const helperPath = join(thisDir, "_test-stdin-helper.js");
+		writeFileSync(
+			helperPath,
+			[
+				'import { readStdinJson } from "./gate-io.js";',
+				"const result = await readStdinJson(process.argv[2]);",
+				'process.stdout.write(JSON.stringify(result) + "\\n");',
+			].join("\n"),
+		);
+
+		const payload = JSON.stringify({ task_id: "T-0001", sentinel: "test" });
+		const { out } = await spawnWithStdin(pd, payload);
+
+		// Result must be the parsed object
+		expect(JSON.parse(out)).toEqual({ task_id: "T-0001", sentinel: "test" });
+
+		// At most one payload file should be written (no double-log)
+		const logDir = join(pd, ".lazy-dev", "runs", "_gate-log");
+		if (existsSync(logDir)) {
+			const files = Array.from(
+				new Bun.Glob("*.payload.json").scanSync({ cwd: logDir }),
+			);
+			expect(files.length).toBeLessThanOrEqual(1);
+		}
+
+		rmSync(helperPath, { force: true });
+	}, 10000);
 });

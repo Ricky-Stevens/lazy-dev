@@ -4,7 +4,12 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { extractUsageFromPayload, extractUsageFromTranscript, recordUsage } from "./usage.js";
+import {
+	extractUsageFromPayload,
+	extractUsageFromTranscript,
+	recordUsage,
+	withUsageLock,
+} from "./usage.js";
 
 // Full usage-entry builder + writer. Extracts usage from the transcript,
 // compares declared-vs-actual model, records declared effort.
@@ -68,16 +73,18 @@ export function updateUsageIteration(projectDir, runId, agentId, iteration) {
 	const path = join(projectDir, ".lazy-dev", "runs", runId, "usage.json");
 	if (!existsSync(path)) return;
 	try {
-		const doc = JSON.parse(readFileSync(path, "utf8"));
-		if (!doc.by_iteration) return;
-		for (let i = doc.by_iteration.length - 1; i >= 0; i--) {
-			if (doc.by_iteration[i].agent_id === agentId) {
-				doc.by_iteration[i].iteration = iteration;
-				break;
+		withUsageLock(`${path}.lock`, () => {
+			const doc = JSON.parse(readFileSync(path, "utf8"));
+			if (!doc.by_iteration) return;
+			for (let i = doc.by_iteration.length - 1; i >= 0; i--) {
+				if (doc.by_iteration[i].agent_id === agentId) {
+					doc.by_iteration[i].iteration = iteration;
+					break;
+				}
 			}
-		}
-		writeFileSync(`${path}.tmp`, JSON.stringify(doc, null, 2));
-		renameSync(`${path}.tmp`, path);
+			writeFileSync(`${path}.tmp`, JSON.stringify(doc, null, 2));
+			renameSync(`${path}.tmp`, path);
+		});
 	} catch {
 		// Best-effort; gate must not fail for bookkeeping.
 	}
