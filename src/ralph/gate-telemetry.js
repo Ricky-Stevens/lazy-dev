@@ -90,30 +90,49 @@ export function updateUsageIteration(projectDir, runId, agentId, iteration) {
 	}
 }
 
-function readAgentFrontmatterField(bareAgentName, field) {
+const frontmatterCache = new Map();
+
+function readAgentFrontmatter(bareAgentName) {
 	if (!bareAgentName) return null;
 	if (!/^[A-Za-z0-9_-]+$/.test(bareAgentName)) return null;
-	if (!/^[a-z_]+$/.test(field)) return null;
+	if (frontmatterCache.has(bareAgentName)) return frontmatterCache.get(bareAgentName);
 	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
 	if (!pluginRoot) return null;
 	const agentPath = join(pluginRoot, "agents", `${bareAgentName}.md`);
-	if (!existsSync(agentPath)) return null;
+	if (!existsSync(agentPath)) {
+		frontmatterCache.set(bareAgentName, null);
+		return null;
+	}
 	try {
 		const content = readFileSync(agentPath, "utf8");
 		const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-		if (!fmMatch) return null;
-		const re = new RegExp(`^${field}:\\s*(\\S+)`, "m");
-		const m = fmMatch[1].match(re);
-		return m ? m[1].trim() : null;
+		frontmatterCache.set(bareAgentName, fmMatch?.[1] || null);
+		return fmMatch?.[1] || null;
 	} catch {
+		frontmatterCache.set(bareAgentName, null);
 		return null;
 	}
 }
 
+function readAgentFrontmatterField(bareAgentName, field) {
+	if (!/^[a-z_]+$/.test(field)) return null;
+	const fm = readAgentFrontmatter(bareAgentName);
+	if (!fm) return null;
+	const re = new RegExp(`^${field}:\\s*(\\S+)`, "m");
+	const m = fm.match(re);
+	return m ? m[1].trim() : null;
+}
+
+const MODEL_SCAN_BYTES = 8 * 1024;
+
 function extractModelFromTranscript(transcriptPath) {
 	try {
 		if (!existsSync(transcriptPath)) return {};
-		const content = readFileSync(transcriptPath, "utf8");
+		const fd = require("node:fs").openSync(transcriptPath, "r");
+		const buf = Buffer.alloc(MODEL_SCAN_BYTES);
+		const bytesRead = require("node:fs").readSync(fd, buf, 0, MODEL_SCAN_BYTES, 0);
+		require("node:fs").closeSync(fd);
+		const content = buf.toString("utf8", 0, bytesRead);
 		for (const line of content.split("\n")) {
 			if (!line.trim()) continue;
 			try {
@@ -122,7 +141,7 @@ function extractModelFromTranscript(transcriptPath) {
 					entry.model || entry.request?.model || entry.message?.model || entry.config?.model;
 				if (model) return { model };
 			} catch {
-				// Malformed JSONL line; try next.
+				// Incomplete or malformed line; try next.
 			}
 		}
 		return {};
