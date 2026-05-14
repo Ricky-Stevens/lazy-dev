@@ -11,6 +11,7 @@ import {
 	mkdirSync,
 	openSync,
 	readFileSync,
+	readSync,
 	renameSync,
 	rmSync,
 	statSync,
@@ -132,6 +133,21 @@ export function extractUsageFromPayload(payload) {
 // Sums usage across every assistant entry in a Claude Code agent transcript
 // (JSONL). Each assistant entry carries message.usage with the canonical
 // field names. Returns zeros if the transcript is unreadable.
+function accumulateUsageLine(line, totals) {
+	if (!line.trim()) return;
+	try {
+		const entry = JSON.parse(line);
+		const u = entry?.message?.usage;
+		if (!u || typeof u !== "object") return;
+		totals.input_tokens += num(u.input_tokens);
+		totals.output_tokens += num(u.output_tokens);
+		totals.cache_read_tokens += num(u.cache_read_input_tokens);
+		totals.cache_creation_tokens += num(u.cache_creation_input_tokens);
+	} catch {
+		// Malformed JSONL line; skip.
+	}
+}
+
 export function extractUsageFromTranscript(transcriptPath) {
 	const totals = {
 		input_tokens: 0,
@@ -140,26 +156,29 @@ export function extractUsageFromTranscript(transcriptPath) {
 		cache_creation_tokens: 0,
 	};
 	if (!transcriptPath || !existsSync(transcriptPath)) return totals;
-	let content;
+	let fd;
 	try {
-		content = readFileSync(transcriptPath, "utf8");
+		fd = openSync(transcriptPath, "r");
 	} catch {
 		return totals;
 	}
-	for (const line of content.split("\n")) {
-		if (!line.trim()) continue;
-		let entry;
-		try {
-			entry = JSON.parse(line);
-		} catch {
-			continue;
+	try {
+		const CHUNK = 64 * 1024;
+		const buf = Buffer.alloc(CHUNK);
+		let remainder = "";
+		let offset = 0;
+		while (true) {
+			const bytesRead = readSync(fd, buf, 0, CHUNK, offset);
+			if (bytesRead === 0) break;
+			offset += bytesRead;
+			const chunk = remainder + buf.toString("utf8", 0, bytesRead);
+			const lines = chunk.split("\n");
+			remainder = lines.pop() || "";
+			for (const line of lines) accumulateUsageLine(line, totals);
 		}
-		const u = entry?.message?.usage;
-		if (!u || typeof u !== "object") continue;
-		totals.input_tokens += num(u.input_tokens);
-		totals.output_tokens += num(u.output_tokens);
-		totals.cache_read_tokens += num(u.cache_read_input_tokens);
-		totals.cache_creation_tokens += num(u.cache_creation_input_tokens);
+		accumulateUsageLine(remainder, totals);
+	} finally {
+		closeSync(fd);
 	}
 	return totals;
 }
