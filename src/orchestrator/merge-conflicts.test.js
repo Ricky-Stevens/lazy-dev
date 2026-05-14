@@ -12,7 +12,10 @@ let projectDir;
 beforeAll(() => {
 	projectDir = mkdtempSync(join(tmpdir(), "merge-conflicts-test-"));
 	execFileSync("git", ["init"], { cwd: projectDir, stdio: "ignore" });
-	execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir, stdio: "ignore" });
+	execFileSync("git", ["config", "user.email", "test@test.com"], {
+		cwd: projectDir,
+		stdio: "ignore",
+	});
 	execFileSync("git", ["config", "user.name", "Test"], { cwd: projectDir, stdio: "ignore" });
 	writeFileSync(join(projectDir, "README.md"), "init\n");
 	execFileSync("git", ["add", "."], { cwd: projectDir, stdio: "ignore" });
@@ -45,7 +48,15 @@ describe("mergerPrepareLocked", () => {
 		expect(result.merge_ids[0]).toMatch(/^M-0001-T-0001$/);
 		expect(result.merge_ids[1]).toMatch(/^M-0002-T-0001$/);
 
-		const envPath = join(projectDir, ".lazy-dev", "runs", "run-m1", "merges", "M-0001-T-0001", "envelope.json");
+		const envPath = join(
+			projectDir,
+			".lazy-dev",
+			"runs",
+			"run-m1",
+			"merges",
+			"M-0001-T-0001",
+			"envelope.json",
+		);
 		expect(existsSync(envPath)).toBe(true);
 
 		const envelope = JSON.parse(readFileSync(envPath, "utf8"));
@@ -82,7 +93,15 @@ describe("mergerPrepare", () => {
 			projectDir,
 		});
 		expect(result.merge_ids).toHaveLength(1);
-		const envPath = join(projectDir, ".lazy-dev", "runs", "run-mp-lock", "merges", result.merge_ids[0], "envelope.json");
+		const envPath = join(
+			projectDir,
+			".lazy-dev",
+			"runs",
+			"run-mp-lock",
+			"merges",
+			result.merge_ids[0],
+			"envelope.json",
+		);
 		expect(existsSync(envPath)).toBe(true);
 	});
 
@@ -135,15 +154,11 @@ describe("mergerEnvelope", () => {
 	});
 
 	test("validates run_id", () => {
-		expect(() =>
-			mergerEnvelope({ runId: "../x", mergeId: "M-0001", projectDir }),
-		).toThrow();
+		expect(() => mergerEnvelope({ runId: "../x", mergeId: "M-0001", projectDir })).toThrow();
 	});
 
 	test("validates merge_id", () => {
-		expect(() =>
-			mergerEnvelope({ runId: "run-1", mergeId: "../../x", projectDir }),
-		).toThrow();
+		expect(() => mergerEnvelope({ runId: "run-1", mergeId: "../../x", projectDir })).toThrow();
 	});
 });
 

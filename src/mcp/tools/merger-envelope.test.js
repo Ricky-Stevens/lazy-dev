@@ -40,10 +40,7 @@ describe("mergerEnvelopeTool", () => {
 	test("handler throws for missing merge envelope", async () => {
 		mkdirSync(join(projectDir, ".lazy-dev", "runs", "run-me2"), { recursive: true });
 		expect(
-			mergerEnvelopeTool.handler(
-				{ run_id: "run-me2", merge_id: "M-9999-T-0001" },
-				{ projectDir },
-			),
+			mergerEnvelopeTool.handler({ run_id: "run-me2", merge_id: "M-9999-T-0001" }, { projectDir }),
 		).rejects.toThrow();
 	});
 });

@@ -233,7 +233,9 @@ describe("runVerifiers — grep edge cases", () => {
 	test("must_match=false fails when pattern is found", () => {
 		writeFileSync(join(cwd, "test.txt"), "hello");
 		const r = runVerifiers({
-			criteria: [{ id: "gf", kind: "grep", pattern: "hello", in_file: "test.txt", must_match: false }],
+			criteria: [
+				{ id: "gf", kind: "grep", pattern: "hello", in_file: "test.txt", must_match: false },
+			],
 			cwd,
 		});
 		expect(r[0].passed).toBe(false);
@@ -253,7 +255,9 @@ describe("runVerifiers — grep edge cases", () => {
 
 	test("grep skips files that don't exist", () => {
 		const r = runVerifiers({
-			criteria: [{ id: "gm", kind: "grep", pattern: "x", in_file: "nonexistent.txt", must_match: true }],
+			criteria: [
+				{ id: "gm", kind: "grep", pattern: "x", in_file: "nonexistent.txt", must_match: true },
+			],
 			cwd,
 		});
 		expect(r[0].passed).toBe(false);

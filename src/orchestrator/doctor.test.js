@@ -125,7 +125,12 @@ describe("doctor", () => {
 		setupDoctorRun(pd, "run-d3", {
 			status: { phase: "done" },
 			usage: {
-				totals: { input_tokens: 1000, output_tokens: 500, cache_read_tokens: 200, cache_creation_tokens: 100 },
+				totals: {
+					input_tokens: 1000,
+					output_tokens: 500,
+					cache_read_tokens: 200,
+					cache_creation_tokens: 100,
+				},
 				by_agent: {},
 				by_model: {},
 				by_effort: {},
@@ -143,9 +148,19 @@ describe("doctor", () => {
 		setupDoctorRun(pd, "run-d4", {
 			status: { phase: "done" },
 			usage: {
-				totals: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
+				totals: {
+					input_tokens: 0,
+					output_tokens: 0,
+					cache_read_tokens: 0,
+					cache_creation_tokens: 0,
+				},
 				by_agent: {
-					"lazy-dev:code-small": { calls: 3, input_tokens: 100, output_tokens: 50, cache_read_tokens: 10 },
+					"lazy-dev:code-small": {
+						calls: 3,
+						input_tokens: 100,
+						output_tokens: 50,
+						cache_read_tokens: 10,
+					},
 				},
 				by_model: {},
 				by_effort: {},
@@ -163,7 +178,12 @@ describe("doctor", () => {
 		setupDoctorRun(pd, "run-d5", {
 			status: { phase: "done" },
 			usage: {
-				totals: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
+				totals: {
+					input_tokens: 0,
+					output_tokens: 0,
+					cache_read_tokens: 0,
+					cache_creation_tokens: 0,
+				},
 				by_agent: {},
 				by_model: {
 					"claude-sonnet": { calls: 1, input_tokens: 100, output_tokens: 50, cache_read_tokens: 0 },
@@ -182,7 +202,12 @@ describe("doctor", () => {
 		setupDoctorRun(pd, "run-d6", {
 			status: { phase: "done" },
 			usage: {
-				totals: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
+				totals: {
+					input_tokens: 0,
+					output_tokens: 0,
+					cache_read_tokens: 0,
+					cache_creation_tokens: 0,
+				},
 				by_agent: {},
 				by_model: {},
 				by_effort: {
@@ -201,7 +226,12 @@ describe("doctor", () => {
 		setupDoctorRun(pd, "run-d7", {
 			status: { phase: "done" },
 			usage: {
-				totals: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
+				totals: {
+					input_tokens: 0,
+					output_tokens: 0,
+					cache_read_tokens: 0,
+					cache_creation_tokens: 0,
+				},
 				by_agent: {},
 				by_model: {},
 				by_effort: {},
@@ -296,7 +326,12 @@ describe("doctor", () => {
 		setupDoctorRun(pd, "run-long", {
 			status: { phase: "done" },
 			usage: {
-				totals: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
+				totals: {
+					input_tokens: 0,
+					output_tokens: 0,
+					cache_read_tokens: 0,
+					cache_creation_tokens: 0,
+				},
 				by_agent: {},
 				by_model: {},
 				by_effort: {},

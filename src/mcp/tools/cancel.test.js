@@ -23,10 +23,7 @@ describe("cancelRunTool", () => {
 	test("handler sets phase to cancelled and returns prev_phase", async () => {
 		const runDir = join(projectDir, ".lazy-dev", "runs", "run-cancel");
 		mkdirSync(runDir, { recursive: true });
-		writeFileSync(
-			join(runDir, "status.json"),
-			JSON.stringify({ phase: "specialists" }),
-		);
+		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "specialists" }));
 
 		const result = await cancelRunTool.handler({ run_id: "run-cancel" }, { projectDir });
 		expect(result.phase).toBe("cancelled");
@@ -46,8 +43,6 @@ describe("cancelRunTool", () => {
 	});
 
 	test("handler rejects invalid run_id", async () => {
-		expect(
-			cancelRunTool.handler({ run_id: "../bad" }, { projectDir }),
-		).rejects.toThrow();
+		expect(cancelRunTool.handler({ run_id: "../bad" }, { projectDir })).rejects.toThrow();
 	});
 });

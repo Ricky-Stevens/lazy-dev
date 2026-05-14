@@ -67,7 +67,9 @@ describe("recordAgentUsage", () => {
 			logDebug: () => {},
 		});
 
-		const usage = JSON.parse(readFileSync(join(pd, ".lazy-dev", "runs", "r2", "usage.json"), "utf8"));
+		const usage = JSON.parse(
+			readFileSync(join(pd, ".lazy-dev", "runs", "r2", "usage.json"), "utf8"),
+		);
 		expect(usage.totals.input_tokens).toBe(100);
 		expect(usage.totals.output_tokens).toBe(50);
 	});
@@ -77,7 +79,7 @@ describe("recordAgentUsage", () => {
 		makeRunDir(pd, "r3");
 
 		const transcriptPath = join(tmpDir, "transcript.jsonl");
-		writeFileSync(transcriptPath, JSON.stringify({ model: "claude-sonnet-4-6-20250514" }) + "\n");
+		writeFileSync(transcriptPath, `${JSON.stringify({ model: "claude-sonnet-4-6-20250514" })}\n`);
 
 		const logs = [];
 		recordAgentUsage({
@@ -93,7 +95,9 @@ describe("recordAgentUsage", () => {
 			logDebug: (msg) => logs.push(msg),
 		});
 
-		const usage = JSON.parse(readFileSync(join(pd, ".lazy-dev", "runs", "r3", "usage.json"), "utf8"));
+		const usage = JSON.parse(
+			readFileSync(join(pd, ".lazy-dev", "runs", "r3", "usage.json"), "utf8"),
+		);
 		const entry = usage.by_iteration[0];
 		expect(entry.model_actual).toBe("claude-sonnet-4-6-20250514");
 	});
@@ -143,10 +147,13 @@ describe("recordAgentUsage — model mismatch", () => {
 		const pluginRoot = join(tmpDir, "plugin-root");
 		const agentDir = join(pluginRoot, "agents");
 		mkdirSync(agentDir, { recursive: true });
-		writeFileSync(join(agentDir, "code-small.md"), "---\nmodel: claude-haiku-4-5-20251001\neffort: low\n---\nSystem prompt.\n");
+		writeFileSync(
+			join(agentDir, "code-small.md"),
+			"---\nmodel: claude-haiku-4-5-20251001\neffort: low\n---\nSystem prompt.\n",
+		);
 
 		const transcriptPath = join(tmpDir, "transcript-mm.jsonl");
-		writeFileSync(transcriptPath, JSON.stringify({ model: "claude-sonnet-4-6-20250514" }) + "\n");
+		writeFileSync(transcriptPath, `${JSON.stringify({ model: "claude-sonnet-4-6-20250514" })}\n`);
 
 		const savedPluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
 		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
@@ -165,7 +172,9 @@ describe("recordAgentUsage — model mismatch", () => {
 				logDebug: (msg) => logs.push(msg),
 			});
 
-			const usage = JSON.parse(readFileSync(join(pd, ".lazy-dev", "runs", "r-mm", "usage.json"), "utf8"));
+			const usage = JSON.parse(
+				readFileSync(join(pd, ".lazy-dev", "runs", "r-mm", "usage.json"), "utf8"),
+			);
 			const entry = usage.by_iteration[0];
 			expect(entry.model_mismatch).toBe(true);
 			expect(entry.model_expected).toBe("claude-haiku-4-5-20251001");
@@ -183,7 +192,10 @@ describe("recordAgentUsage — model mismatch", () => {
 		makeRunDir(pd, "r-nm");
 
 		const transcriptPath = join(tmpDir, "transcript-nested.jsonl");
-		writeFileSync(transcriptPath, JSON.stringify({ request: { model: "claude-opus-4-7-20250513" } }) + "\n");
+		writeFileSync(
+			transcriptPath,
+			`${JSON.stringify({ request: { model: "claude-opus-4-7-20250513" } })}\n`,
+		);
 
 		const logs = [];
 		recordAgentUsage({
@@ -199,7 +211,9 @@ describe("recordAgentUsage — model mismatch", () => {
 			logDebug: (msg) => logs.push(msg),
 		});
 
-		const usage = JSON.parse(readFileSync(join(pd, ".lazy-dev", "runs", "r-nm", "usage.json"), "utf8"));
+		const usage = JSON.parse(
+			readFileSync(join(pd, ".lazy-dev", "runs", "r-nm", "usage.json"), "utf8"),
+		);
 		expect(usage.by_iteration[0].model_actual).toBe("claude-opus-4-7-20250513");
 	});
 });

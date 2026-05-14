@@ -19,7 +19,10 @@ describe("plannerDispatchTool", () => {
 		expect(plannerDispatchTool.name).toBe("planner_dispatch");
 		expect(plannerDispatchTool.inputSchema.required).toEqual(["run_id"]);
 		expect(plannerDispatchTool.inputSchema.properties.effort.enum).toEqual([
-			"medium", "high", "xhigh", "max",
+			"medium",
+			"high",
+			"xhigh",
+			"max",
 		]);
 	});
 
@@ -27,15 +30,9 @@ describe("plannerDispatchTool", () => {
 		const runDir = join(projectDir, ".lazy-dev", "runs", "run-pd");
 		mkdirSync(runDir, { recursive: true });
 		writeFileSync(join(runDir, "brief.md"), "test brief\n");
-		writeFileSync(
-			join(runDir, "status.json"),
-			JSON.stringify({ run_id: "run-pd", phase: "plan" }),
-		);
+		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: "run-pd", phase: "plan" }));
 
-		const result = await plannerDispatchTool.handler(
-			{ run_id: "run-pd" },
-			{ projectDir },
-		);
+		const result = await plannerDispatchTool.handler({ run_id: "run-pd" }, { projectDir });
 		expect(result.agent_namespaced).toContain("planner");
 		expect(result.dispatch_prompt).toContain("Brief:");
 	});

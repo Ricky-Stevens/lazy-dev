@@ -20,14 +20,8 @@ afterAll(() => {
 function setupReviewRun(pd, runId, tasks, opts = {}) {
 	const runDir = join(pd, ".lazy-dev", "runs", runId);
 	mkdirSync(runDir, { recursive: true });
-	writeFileSync(
-		join(runDir, "tasks.json"),
-		JSON.stringify({ tasks }),
-	);
-	writeFileSync(
-		join(runDir, "status.json"),
-		JSON.stringify({ run_id: runId, phase: "review" }),
-	);
+	writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks }));
+	writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "review" }));
 	if (opts.previousReview) {
 		writeFileSync(join(runDir, "review-prev.md"), opts.previousReview);
 	}
@@ -59,9 +53,7 @@ describe("REVIEWER_EFFORTS", () => {
 describe("reviewBuild", () => {
 	test("builds review envelope with default effort", () => {
 		const pd = join(tmpDir, "rb1");
-		setupReviewRun(pd, "run-rb1", [
-			{ id: "T-0001", agent: "code-small", title: "Fix bug" },
-		]);
+		setupReviewRun(pd, "run-rb1", [{ id: "T-0001", agent: "code-small", title: "Fix bug" }]);
 
 		const result = reviewBuild({ runId: "run-rb1", projectDir: pd });
 		expect(result.agent_namespaced).toBe("lazy-dev:reviewer");
@@ -89,9 +81,9 @@ describe("reviewBuild", () => {
 		const pd = join(tmpDir, "rb3");
 		setupReviewRun(pd, "run-rb3", []);
 
-		expect(() =>
-			reviewBuild({ runId: "run-rb3", projectDir: pd, effort: "low" }),
-		).toThrow("unknown reviewer effort");
+		expect(() => reviewBuild({ runId: "run-rb3", projectDir: pd, effort: "low" })).toThrow(
+			"unknown reviewer effort",
+		);
 	});
 
 	test("sets retry=true when review-prev.md exists", () => {
@@ -120,7 +112,10 @@ describe("reviewBuild", () => {
 		const pd = join(tmpDir, "rb-badsent");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-badsent");
 		mkdirSync(runDir, { recursive: true });
-		writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }));
+		writeFileSync(
+			join(runDir, "tasks.json"),
+			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
+		);
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
 		const taskDir = join(runDir, "tasks", "T-0001");
 		mkdirSync(taskDir, { recursive: true });
@@ -135,7 +130,10 @@ describe("reviewBuild", () => {
 		const pd = join(tmpDir, "rb-nosent");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-nosent");
 		mkdirSync(runDir, { recursive: true });
-		writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }));
+		writeFileSync(
+			join(runDir, "tasks.json"),
+			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
+		);
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
 		const taskDir = join(runDir, "tasks", "T-0001");
 		mkdirSync(taskDir, { recursive: true });
@@ -191,10 +189,7 @@ describe("reviewVerdict", () => {
 		const pd = join(tmpDir, "rv3");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-rv3");
 		mkdirSync(runDir, { recursive: true });
-		writeFileSync(
-			join(runDir, "review.md"),
-			"# Review\n**Verdict:** BLOCK\nSecurity issue.\n",
-		);
+		writeFileSync(join(runDir, "review.md"), "# Review\n**Verdict:** BLOCK\nSecurity issue.\n");
 
 		const result = reviewVerdict({ runId: "run-rv3", projectDir: pd });
 		expect(result.verdict).toBe("BLOCK");
@@ -223,7 +218,10 @@ describe("reviewBuild — worktree handling", () => {
 		const pd = join(tmpDir, "rb-wt1");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-wt1");
 		mkdirSync(runDir, { recursive: true });
-		writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }));
+		writeFileSync(
+			join(runDir, "tasks.json"),
+			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
+		);
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
 
 		const wtDir = join(pd, ".lazy-dev", "worktrees", "run-wt1", "T-0001-abc123");
@@ -242,7 +240,10 @@ describe("reviewBuild — worktree handling", () => {
 		const pd = join(tmpDir, "rb-wt2");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-wt2");
 		mkdirSync(runDir, { recursive: true });
-		writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }));
+		writeFileSync(
+			join(runDir, "tasks.json"),
+			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
+		);
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
 
 		const wtDir = join(pd, ".lazy-dev", "worktrees", "run-wt2", "T-0001-abc123");
@@ -260,7 +261,7 @@ describe("reviewBuild — worktree handling", () => {
 		const taskDir = join(runDir, "tasks", "T-0001");
 		mkdirSync(taskDir, { recursive: true });
 
-		const result = reviewBuild({ runId: "run-wt2", projectDir: pd });
+		reviewBuild({ runId: "run-wt2", projectDir: pd });
 		expect(existsSync(join(taskDir, "diff.patch"))).toBe(true);
 	});
 
@@ -268,7 +269,10 @@ describe("reviewBuild — worktree handling", () => {
 		const pd = join(tmpDir, "rb-nwt");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-nwt");
 		mkdirSync(runDir, { recursive: true });
-		writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }));
+		writeFileSync(
+			join(runDir, "tasks.json"),
+			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
+		);
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
 
 		const result = reviewBuild({ runId: "run-nwt", projectDir: pd });

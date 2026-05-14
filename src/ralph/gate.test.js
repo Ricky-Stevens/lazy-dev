@@ -27,7 +27,10 @@ beforeAll(() => {
 	mkdirSync(runDir, { recursive: true });
 
 	execFileSync("git", ["init"], { cwd: projectDir, stdio: "ignore" });
-	execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir, stdio: "ignore" });
+	execFileSync("git", ["config", "user.email", "test@test.com"], {
+		cwd: projectDir,
+		stdio: "ignore",
+	});
 	execFileSync("git", ["config", "user.name", "Test"], { cwd: projectDir, stdio: "ignore" });
 	writeFileSync(join(projectDir, "README.md"), "init\n");
 	execFileSync("git", ["add", "."], { cwd: projectDir, stdio: "ignore" });
@@ -47,10 +50,7 @@ describe("gate.js subprocess", () => {
 
 	test("exits 0 silently for per-run agent (planner)", () => {
 		mkdirSync(join(runDir, "status.json").replace("/status.json", ""), { recursive: true });
-		writeFileSync(
-			join(runDir, "status.json"),
-			JSON.stringify({ run_id: runId, phase: "plan" }),
-		);
+		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "plan" }));
 
 		const r = runGate({
 			agent_type: "lazy-dev:planner",

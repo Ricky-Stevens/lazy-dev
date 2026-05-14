@@ -35,8 +35,8 @@ describe("pruneTool", () => {
 		mkdirSync(runDir, { recursive: true });
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "specialists" }));
 
-		expect(
-			pruneTool.handler({ run_id: "run-active" }, { projectDir }),
-		).rejects.toThrow("refusing to prune");
+		expect(pruneTool.handler({ run_id: "run-active" }, { projectDir })).rejects.toThrow(
+			"refusing to prune",
+		);
 	});
 });

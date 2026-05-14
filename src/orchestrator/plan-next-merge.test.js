@@ -63,7 +63,9 @@ describe("mergePhase", () => {
 		const ctx = { runDir, runId: "run-mp3", projectDir: pd };
 		const result = mergePhase(ctx, {
 			loadTasks: () => [],
-			advancePhase: (_ctx, phase) => { advancedTo = phase; },
+			advancePhase: (_ctx, phase) => {
+				advancedTo = phase;
+			},
 		});
 
 		expect(result.phase).toBe("integration_test");
@@ -82,7 +84,9 @@ describe("mergePhase", () => {
 		const ctx = { runDir, runId: "run-filter", projectDir: pd };
 		const result = mergePhase(ctx, {
 			loadTasks: () => [],
-			advancePhase: (_ctx, phase) => { advancedTo = phase; },
+			advancePhase: (_ctx, phase) => {
+				advancedTo = phase;
+			},
 		});
 
 		expect(result.phase).toBe("integration_test");
@@ -98,7 +102,9 @@ describe("mergePhase", () => {
 		const ctx = { runDir, runId: "run-mp4", projectDir: pd };
 		const result = mergePhase(ctx, {
 			loadTasks: () => [],
-			advancePhase: (_ctx, phase) => { advancedTo = phase; },
+			advancePhase: (_ctx, phase) => {
+				advancedTo = phase;
+			},
 		});
 
 		expect(result.phase).toBe("integration_test");
@@ -116,7 +122,9 @@ describe("integrationTestPhase", () => {
 		let advancedTo = null;
 		const ctx = { runDir, projectDir: pd };
 		const result = integrationTestPhase(ctx, {
-			advancePhase: (_ctx, phase) => { advancedTo = phase; },
+			advancePhase: (_ctx, phase) => {
+				advancedTo = phase;
+			},
 		});
 
 		expect(result.phase).toBe("done");
@@ -136,10 +144,9 @@ describe("integrationTestPhase", () => {
 		writeFileSync(join(pd, "package.json"), JSON.stringify({ scripts: { test: "bun test" } }));
 		writeFileSync(join(pd, "bun.lockb"), "");
 
-		let advancedTo = null;
 		const ctx = { runDir, projectDir: pd };
 		const result = integrationTestPhase(ctx, {
-			advancePhase: (_ctx, phase) => { advancedTo = phase; },
+			advancePhase: () => {},
 		});
 
 		expect(result.integration_test).toBeDefined();
@@ -261,7 +268,9 @@ describe("integrationTestPhase", () => {
 		let advancedTo = null;
 		const ctx = { runDir, projectDir: pd };
 		const result = integrationTestPhase(ctx, {
-			advancePhase: (_ctx, phase) => { advancedTo = phase; },
+			advancePhase: (_ctx, phase) => {
+				advancedTo = phase;
+			},
 		});
 
 		expect(result.phase).toBe("done");

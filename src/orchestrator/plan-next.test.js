@@ -117,7 +117,10 @@ describe("approvePhase", () => {
 
 describe("specialistsPhase", () => {
 	test("dispatches pending tasks", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "specialists" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "specialists" }),
+		);
 		writePlan([simpleTask("T-0001")]);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("specialists");
@@ -126,7 +129,10 @@ describe("specialistsPhase", () => {
 	});
 
 	test("returns blocked when a task has failed", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "specialists" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "specialists" }),
+		);
 		writePlan([simpleTask("T-0001")]);
 		const taskDir = join(runDir, "tasks", "T-0001");
 		mkdirSync(taskDir, { recursive: true });
@@ -137,7 +143,10 @@ describe("specialistsPhase", () => {
 	});
 
 	test("returns done_specialists when all tasks approved", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "specialists" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "specialists" }),
+		);
 		writePlan([simpleTask("T-0001")]);
 		const taskDir = join(runDir, "tasks", "T-0001");
 		mkdirSync(taskDir, { recursive: true });
@@ -148,8 +157,16 @@ describe("specialistsPhase", () => {
 	});
 
 	test("returns wait when tasks are running", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "specialists" }));
-		writePlan([simpleTask("T-0001"), simpleTask("T-0002"), simpleTask("T-0003"), simpleTask("T-0004")]);
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "specialists" }),
+		);
+		writePlan([
+			simpleTask("T-0001"),
+			simpleTask("T-0002"),
+			simpleTask("T-0003"),
+			simpleTask("T-0004"),
+		]);
 		for (const tid of ["T-0001", "T-0002", "T-0003"]) {
 			const taskDir = join(runDir, "tasks", tid);
 			mkdirSync(taskDir, { recursive: true });
@@ -161,7 +178,10 @@ describe("specialistsPhase", () => {
 	});
 
 	test("returns error when no tasks found", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "specialists" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "specialists" }),
+		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("error");
 		expect(result.detail).toContain("no tasks");
@@ -179,16 +199,25 @@ describe("reviewPhase", () => {
 	test("advances to merge on PASS_ALL verdict", () => {
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "review" }));
 		writePlan([simpleTask("T-0001")]);
-		writeFileSync(join(runDir, "review.md"), "**Verdict:** PASS_ALL\n## T-0001\n**Verdict:** PASS\n");
+		writeFileSync(
+			join(runDir, "review.md"),
+			"**Verdict:** PASS_ALL\n## T-0001\n**Verdict:** PASS\n",
+		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("merge");
 		expect(result.action).toBe("run_merge");
 	});
 
 	test("returns auto_retry on CHANGES_REQUESTED verdict", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "review", review_pass: 0 }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "review", review_pass: 0 }),
+		);
 		writePlan([simpleTask("T-0001")]);
-		writeFileSync(join(runDir, "review.md"), "**Verdict:** CHANGES_REQUESTED\n\n## T-0001\n\n**Verdict:** CHANGES_REQUESTED\nFix X.\n");
+		writeFileSync(
+			join(runDir, "review.md"),
+			"**Verdict:** CHANGES_REQUESTED\n\n## T-0001\n\n**Verdict:** CHANGES_REQUESTED\nFix X.\n",
+		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("review");
 		expect(result.action).toBe("auto_retry");
@@ -205,9 +234,15 @@ describe("reviewPhase", () => {
 	});
 
 	test("surfaces error after max review retries", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "review", review_pass: 1 }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "review", review_pass: 1 }),
+		);
 		writePlan([simpleTask("T-0001")]);
-		writeFileSync(join(runDir, "review.md"), "**Verdict:** CHANGES_REQUESTED\n## T-0001\n**Verdict:** CHANGES_REQUESTED\n");
+		writeFileSync(
+			join(runDir, "review.md"),
+			"**Verdict:** CHANGES_REQUESTED\n## T-0001\n**Verdict:** CHANGES_REQUESTED\n",
+		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("error");
 		expect(result.detail).toContain("retry pass");
@@ -231,14 +266,20 @@ describe("planNext — terminal phases", () => {
 	});
 
 	test("cancelled phase returns surface error", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "cancelled" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "cancelled" }),
+		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("error");
 		expect(result.detail).toContain("cancelled");
 	});
 
 	test("unknown phase returns error", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "UNKNOWN_PHASE" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "UNKNOWN_PHASE" }),
+		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("error");
 		expect(result.detail).toContain("unknown phase");
@@ -255,7 +296,10 @@ describe("planNext — merge phase delegation", () => {
 	});
 
 	test("integration_test phase skips when no test command", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "integration_test" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "integration_test" }),
+		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("done");
 		expect(result.action).toBe("summarise");
@@ -265,16 +309,33 @@ describe("planNext — merge phase delegation", () => {
 
 describe("planNext — budget caps", () => {
 	test("triggers input token cap error", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "specialists" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "specialists" }),
+		);
 		writePlan([simpleTask("T-0001")]);
 		const settingsDir = join(projectDir, ".lazy-dev");
-		writeFileSync(join(settingsDir, "settings.json"), JSON.stringify({
-			budget: { per_run: { max_input_tokens: 10 } },
-		}));
-		writeFileSync(join(runDir, "usage.json"), JSON.stringify({
-			totals: { input_tokens: 100, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
-			by_agent: {}, by_model: {}, by_effort: {}, by_iteration: [],
-		}));
+		writeFileSync(
+			join(settingsDir, "settings.json"),
+			JSON.stringify({
+				budget: { per_run: { max_input_tokens: 10 } },
+			}),
+		);
+		writeFileSync(
+			join(runDir, "usage.json"),
+			JSON.stringify({
+				totals: {
+					input_tokens: 100,
+					output_tokens: 0,
+					cache_read_tokens: 0,
+					cache_creation_tokens: 0,
+				},
+				by_agent: {},
+				by_model: {},
+				by_effort: {},
+				by_iteration: [],
+			}),
+		);
 
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("error");
@@ -282,16 +343,33 @@ describe("planNext — budget caps", () => {
 	});
 
 	test("triggers output token cap error", () => {
-		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "specialists" }));
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "specialists" }),
+		);
 		writePlan([simpleTask("T-0001")]);
 		const settingsDir = join(projectDir, ".lazy-dev");
-		writeFileSync(join(settingsDir, "settings.json"), JSON.stringify({
-			budget: { per_run: { max_output_tokens: 10 } },
-		}));
-		writeFileSync(join(runDir, "usage.json"), JSON.stringify({
-			totals: { input_tokens: 0, output_tokens: 100, cache_read_tokens: 0, cache_creation_tokens: 0 },
-			by_agent: {}, by_model: {}, by_effort: {}, by_iteration: [],
-		}));
+		writeFileSync(
+			join(settingsDir, "settings.json"),
+			JSON.stringify({
+				budget: { per_run: { max_output_tokens: 10 } },
+			}),
+		);
+		writeFileSync(
+			join(runDir, "usage.json"),
+			JSON.stringify({
+				totals: {
+					input_tokens: 0,
+					output_tokens: 100,
+					cache_read_tokens: 0,
+					cache_creation_tokens: 0,
+				},
+				by_agent: {},
+				by_model: {},
+				by_effort: {},
+				by_iteration: [],
+			}),
+		);
 
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("error");

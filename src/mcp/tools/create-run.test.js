@@ -22,18 +22,13 @@ describe("createRunTool", () => {
 	});
 
 	test("handler creates a run and returns run_id + run_dir", async () => {
-		const result = await createRunTool.handler(
-			{ brief: "Add dark mode" },
-			{ projectDir },
-		);
+		const result = await createRunTool.handler({ brief: "Add dark mode" }, { projectDir });
 		expect(result.run_id).toBeDefined();
 		expect(result.run_dir).toBeDefined();
 		expect(existsSync(result.run_dir)).toBe(true);
 	});
 
 	test("handler rejects empty brief", async () => {
-		expect(
-			createRunTool.handler({ brief: "" }, { projectDir }),
-		).rejects.toThrow();
+		expect(createRunTool.handler({ brief: "" }, { projectDir })).rejects.toThrow();
 	});
 });

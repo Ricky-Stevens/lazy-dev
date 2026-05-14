@@ -12,7 +12,10 @@ let projectDir;
 beforeAll(() => {
 	projectDir = mkdtempSync(join(tmpdir(), "dispatch-test-"));
 	execFileSync("git", ["init"], { cwd: projectDir, stdio: "ignore" });
-	execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir, stdio: "ignore" });
+	execFileSync("git", ["config", "user.email", "test@test.com"], {
+		cwd: projectDir,
+		stdio: "ignore",
+	});
 	execFileSync("git", ["config", "user.name", "Test"], { cwd: projectDir, stdio: "ignore" });
 	writeFileSync(join(projectDir, "README.md"), "init\n");
 	execFileSync("git", ["add", "."], { cwd: projectDir, stdio: "ignore" });
@@ -26,10 +29,7 @@ afterAll(() => {
 function setupDispatchRun(runId, tasks) {
 	const runDir = join(projectDir, ".lazy-dev", "runs", runId);
 	mkdirSync(runDir, { recursive: true });
-	writeFileSync(
-		join(runDir, "tasks.json"),
-		JSON.stringify({ tasks }),
-	);
+	writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks }));
 	writeFileSync(
 		join(runDir, "status.json"),
 		JSON.stringify({ run_id: runId, phase: "specialists" }),
@@ -50,17 +50,17 @@ describe("dispatch", () => {
 		const runDir = join(projectDir, ".lazy-dev", "runs", "run-no-tasks");
 		mkdirSync(runDir, { recursive: true });
 
-		expect(() =>
-			dispatch({ runId: "run-no-tasks", taskId: "T-0001", projectDir }),
-		).toThrow("tasks.json missing");
+		expect(() => dispatch({ runId: "run-no-tasks", taskId: "T-0001", projectDir })).toThrow(
+			"tasks.json missing",
+		);
 	});
 
 	test("throws when task not found in plan", () => {
 		setupDispatchRun("run-missing-task", [{ id: "T-0001", agent: "code-small" }]);
 
-		expect(() =>
-			dispatch({ runId: "run-missing-task", taskId: "T-9999", projectDir }),
-		).toThrow("not found in run state");
+		expect(() => dispatch({ runId: "run-missing-task", taskId: "T-9999", projectDir })).toThrow(
+			"not found in run state",
+		);
 	});
 
 	test("throws when dependency is not approved", () => {
@@ -71,9 +71,9 @@ describe("dispatch", () => {
 		const taskDir = join(projectDir, ".lazy-dev", "runs", "run-dep-fail", "tasks", "T-0001");
 		mkdirSync(taskDir, { recursive: true });
 
-		expect(() =>
-			dispatch({ runId: "run-dep-fail", taskId: "T-0002", projectDir }),
-		).toThrow("not approved");
+		expect(() => dispatch({ runId: "run-dep-fail", taskId: "T-0002", projectDir })).toThrow(
+			"not approved",
+		);
 	});
 });
 
@@ -83,9 +83,7 @@ describe("dispatch — full round-trip with worktree", () => {
 		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
 		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
 		try {
-			setupDispatchRun("run-full", [
-				{ id: "T-0001", agent: "code-small", title: "Test task" },
-			]);
+			setupDispatchRun("run-full", [{ id: "T-0001", agent: "code-small", title: "Test task" }]);
 
 			const result = dispatch({ runId: "run-full", taskId: "T-0001", projectDir });
 			expect(result.agent).toBe("code-small");
@@ -113,15 +111,17 @@ describe("dispatch — full round-trip with worktree", () => {
 		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
 		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
 		try {
-			setupDispatchRun("run-redispatch", [
-				{ id: "T-0001", agent: "code-small", title: "Test" },
-			]);
+			setupDispatchRun("run-redispatch", [{ id: "T-0001", agent: "code-small", title: "Test" }]);
 			const taskDir = join(projectDir, ".lazy-dev", "runs", "run-redispatch", "tasks", "T-0001");
 			mkdirSync(taskDir, { recursive: true });
-			writeFileSync(join(taskDir, "envelope.json"), JSON.stringify({
-				id: "T-0001", agent: "code-small",
-				dispatched_at: "2025-01-01T00:00:00Z",
-			}));
+			writeFileSync(
+				join(taskDir, "envelope.json"),
+				JSON.stringify({
+					id: "T-0001",
+					agent: "code-small",
+					dispatched_at: "2025-01-01T00:00:00Z",
+				}),
+			);
 
 			const result = dispatch({ runId: "run-redispatch", taskId: "T-0001", projectDir });
 			const envelope = JSON.parse(readFileSync(result.envelope_path, "utf8"));

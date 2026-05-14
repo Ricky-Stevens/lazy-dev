@@ -18,9 +18,7 @@ describe("reviewBuildTool", () => {
 	test("has correct tool metadata", () => {
 		expect(reviewBuildTool.name).toBe("review_build");
 		expect(reviewBuildTool.inputSchema.required).toEqual(["run_id"]);
-		expect(reviewBuildTool.inputSchema.properties.effort.enum).toEqual([
-			"high", "xhigh", "max",
-		]);
+		expect(reviewBuildTool.inputSchema.properties.effort.enum).toEqual(["high", "xhigh", "max"]);
 	});
 
 	test("handler builds review envelope", async () => {
@@ -32,10 +30,7 @@ describe("reviewBuildTool", () => {
 		);
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
 
-		const result = await reviewBuildTool.handler(
-			{ run_id: "run-rb" },
-			{ projectDir },
-		);
+		const result = await reviewBuildTool.handler({ run_id: "run-rb" }, { projectDir });
 		expect(result.agent_namespaced).toContain("reviewer");
 		expect(result.envelope_path).toContain("review-envelope.json");
 		expect(result.dispatch_prompt).toContain("Envelope:");

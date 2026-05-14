@@ -41,10 +41,7 @@ describe("retryTasksTool", () => {
 
 	test("handler rejects empty task_ids", async () => {
 		expect(
-			retryTasksTool.handler(
-				{ run_id: "run-1", task_ids: [] },
-				{ projectDir },
-			),
+			retryTasksTool.handler({ run_id: "run-1", task_ids: [] }, { projectDir }),
 		).rejects.toThrow();
 	});
 });

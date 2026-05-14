@@ -31,14 +31,10 @@ describe("approveTool", () => {
 	});
 
 	test("handler rejects invalid run_id", async () => {
-		expect(
-			approveTool.handler({ run_id: "../escape" }, { projectDir }),
-		).rejects.toThrow();
+		expect(approveTool.handler({ run_id: "../escape" }, { projectDir })).rejects.toThrow();
 	});
 
 	test("handler rejects empty run_id", async () => {
-		expect(
-			approveTool.handler({ run_id: "" }, { projectDir }),
-		).rejects.toThrow();
+		expect(approveTool.handler({ run_id: "" }, { projectDir })).rejects.toThrow();
 	});
 });

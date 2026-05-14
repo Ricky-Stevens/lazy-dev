@@ -20,15 +20,13 @@ afterAll(() => {
 function setupRun(pd, runId, phase, tasks = []) {
 	const runDir = join(pd, ".lazy-dev", "runs", runId);
 	mkdirSync(runDir, { recursive: true });
-	writeFileSync(
-		join(runDir, "status.json"),
-		JSON.stringify({ run_id: runId, phase }),
-	);
+	writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase }));
 	for (const t of tasks) {
 		const taskDir = join(runDir, "tasks", t.id);
 		mkdirSync(taskDir, { recursive: true });
 		if (t.approved) writeFileSync(join(taskDir, "APPROVED"), "{}");
-		if (t.failed) writeFileSync(join(taskDir, "FAILED"), JSON.stringify({ reason: t.failReason || "test" }));
+		if (t.failed)
+			writeFileSync(join(taskDir, "FAILED"), JSON.stringify({ reason: t.failReason || "test" }));
 		if (t.envelope) writeFileSync(join(taskDir, "envelope.json"), "{}");
 	}
 	return runDir;
@@ -94,15 +92,28 @@ describe("statusForRun", () => {
 		const runDir = join(pd, ".lazy-dev", "runs", "run-5");
 		mkdirSync(runDir, { recursive: true });
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "done" }));
-		writeFileSync(join(runDir, "usage.json"), JSON.stringify({
-			totals: { input_tokens: 100, output_tokens: 50, cache_read_tokens: 10, cache_creation_tokens: 5 },
-			by_agent: {
-				"lazy-dev:code-small": { calls: 2, input_tokens: 100, output_tokens: 50, cache_read_tokens: 10 },
-			},
-			by_model: {},
-			by_effort: {},
-			by_iteration: [],
-		}));
+		writeFileSync(
+			join(runDir, "usage.json"),
+			JSON.stringify({
+				totals: {
+					input_tokens: 100,
+					output_tokens: 50,
+					cache_read_tokens: 10,
+					cache_creation_tokens: 5,
+				},
+				by_agent: {
+					"lazy-dev:code-small": {
+						calls: 2,
+						input_tokens: 100,
+						output_tokens: 50,
+						cache_read_tokens: 10,
+					},
+				},
+				by_model: {},
+				by_effort: {},
+				by_iteration: [],
+			}),
+		);
 
 		const result = statusForRun({ runId: "run-5", projectDir: pd });
 		expect(result.usage.input_tokens).toBe(100);

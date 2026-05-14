@@ -20,10 +20,7 @@ afterAll(() => {
 function setupRetryRun(pd, runId, taskIds, reviewMd = null) {
 	const runDir = join(pd, ".lazy-dev", "runs", runId);
 	mkdirSync(runDir, { recursive: true });
-	writeFileSync(
-		join(runDir, "status.json"),
-		JSON.stringify({ phase: "review", run_id: runId }),
-	);
+	writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review", run_id: runId }));
 	for (const tid of taskIds) {
 		const taskDir = join(runDir, "tasks", tid);
 		mkdirSync(taskDir, { recursive: true });
@@ -43,7 +40,12 @@ function setupRetryRun(pd, runId, taskIds, reviewMd = null) {
 describe("retryTasks", () => {
 	test("resets tasks and archives review.md", () => {
 		const pd = join(tmpDir, "r1");
-		const runDir = setupRetryRun(pd, "run-r1", ["T-0001", "T-0002"], "# Review\n## T-0001\nFix imports\n## T-0002\nAdd tests\n");
+		const runDir = setupRetryRun(
+			pd,
+			"run-r1",
+			["T-0001", "T-0002"],
+			"# Review\n## T-0001\nFix imports\n## T-0002\nAdd tests\n",
+		);
 
 		const result = retryTasks({ runId: "run-r1", taskIds: ["T-0001", "T-0002"], projectDir: pd });
 		expect(result.reset).toEqual(["T-0001", "T-0002"]);
@@ -70,7 +72,10 @@ describe("retryTasks", () => {
 		retryTasks({ runId: "run-r2", taskIds: ["T-0001"], projectDir: pd });
 
 		const envelope = JSON.parse(
-			readFileSync(join(pd, ".lazy-dev", "runs", "run-r2", "tasks", "T-0001", "envelope.json"), "utf8"),
+			readFileSync(
+				join(pd, ".lazy-dev", "runs", "run-r2", "tasks", "T-0001", "envelope.json"),
+				"utf8",
+			),
 		);
 		expect(envelope.reviewer_notes).toContain("review.md");
 	});
@@ -89,9 +94,9 @@ describe("retryTasks", () => {
 		mkdirSync(join(runDir, "tasks", "T-0001"), { recursive: true });
 		writeFileSync(join(runDir, "status.json"), "{}");
 
-		expect(() =>
-			retryTasks({ runId: "run-r4", taskIds: ["T-0001"], projectDir: pd }),
-		).toThrow("envelope missing");
+		expect(() => retryTasks({ runId: "run-r4", taskIds: ["T-0001"], projectDir: pd })).toThrow(
+			"envelope missing",
+		);
 	});
 
 	test("validates run_id", () => {
@@ -101,9 +106,7 @@ describe("retryTasks", () => {
 	});
 
 	test("validates task_ids array", () => {
-		expect(() =>
-			retryTasks({ runId: "run-1", taskIds: [], projectDir: tmpDir }),
-		).toThrow();
+		expect(() => retryTasks({ runId: "run-1", taskIds: [], projectDir: tmpDir })).toThrow();
 	});
 
 	test("RETRY marker contains timestamp and reason", () => {
