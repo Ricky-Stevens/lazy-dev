@@ -35,6 +35,7 @@ export function mergePhase(ctx, { loadTasks, advancePhase }) {
 	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
 	const merged = [];
 	for (const t of tasks) {
+		if (existsSync(join(runDir, "tasks", t.id, "MERGED"))) continue;
 		if (!existsSync(join(runDir, "tasks", t.id, "APPROVED"))) continue;
 		try {
 			execFileSync(
@@ -48,43 +49,13 @@ export function mergePhase(ctx, { loadTasks, advancePhase }) {
 					maxBuffer: 10 * 1024 * 1024,
 				},
 			);
+			atomicWrite(
+				join(runDir, "tasks", t.id, "MERGED"),
+				JSON.stringify({ at: new Date().toISOString() }),
+			);
 			merged.push(t.id);
 		} catch (err) {
-			if (err.status === 3) {
-				const conflictedFiles = (err.stdout || "")
-					.split("\n")
-					.map((s) => s.trim())
-					.filter(Boolean);
-				if (conflictedFiles.length === 0) {
-					return {
-						phase: "error",
-						action: "surface",
-						detail: `merge failed for ${t.id}: exit 3 but no conflict file list on stdout`,
-					};
-				}
-				let prep;
-				try {
-					prep = mergerPrepareLocked({ runId, taskId: t.id, conflictedFiles, projectDir });
-				} catch (prepErr) {
-					return {
-						phase: "error",
-						action: "surface",
-						detail: `mergerPrepare failed for ${t.id}: ${prepErr.message}`,
-					};
-				}
-				return {
-					phase: "merge",
-					action: "dispatch_merger",
-					merge_id: prep.merge_ids[0],
-					task_id: t.id,
-					pending_merges: prep.merge_ids,
-				};
-			}
-			return {
-				phase: "error",
-				action: "surface",
-				detail: `merge failed for ${t.id}: ${err.message}`,
-			};
+			return handleMergeError(err, t.id, runId, projectDir);
 		}
 	}
 
@@ -160,6 +131,59 @@ function runTestCommand(cmd, cwd) {
 			output_tail: `${tail(err.stdout?.toString?.() || "", 20)}\n${tail(err.stderr?.toString?.() || "", 20)}`,
 		};
 	}
+}
+
+function handleMergeError(err, taskId, runId, projectDir) {
+	if (err.status !== 3) {
+		return {
+			phase: "error",
+			action: "surface",
+			detail: `merge failed for ${taskId}: ${err.message}`,
+		};
+	}
+	const rawFiles = (err.stdout || "")
+		.split("\n")
+		.map((s) => s.trim())
+		.filter(Boolean);
+	const invalidPath = rawFiles.find(isPathTraversal);
+	if (invalidPath !== undefined) {
+		return {
+			phase: "error",
+			action: "surface",
+			detail: `merge produced invalid conflict path: ${invalidPath}`,
+		};
+	}
+	if (rawFiles.length === 0) {
+		return {
+			phase: "error",
+			action: "surface",
+			detail: `merge failed for ${taskId}: exit 3 but no conflict file list on stdout`,
+		};
+	}
+	let prep;
+	try {
+		prep = mergerPrepareLocked({ runId, taskId, conflictedFiles: rawFiles, projectDir });
+	} catch (prepErr) {
+		return {
+			phase: "error",
+			action: "surface",
+			detail: `mergerPrepare failed for ${taskId}: ${prepErr.message}`,
+		};
+	}
+	return {
+		phase: "merge",
+		action: "dispatch_merger",
+		merge_id: prep.merge_ids[0],
+		task_id: taskId,
+		pending_merges: prep.merge_ids,
+	};
+}
+
+function isPathTraversal(p) {
+	if (p.startsWith("/")) return true;
+	if (p.includes("\0")) return true;
+	const segments = p.split(/[/\\]/);
+	return segments.some((s) => s === "..");
 }
 
 function writeStatusField(runDir, field, value) {

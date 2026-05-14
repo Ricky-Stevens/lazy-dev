@@ -80,6 +80,31 @@ describe("mergerPrepareLocked", () => {
 			}),
 		).toThrow("tasks.json missing");
 	});
+
+	test("second call for the same task starts at next available M-NNNN", () => {
+		setupMergeRun("run-m-collision", [
+			{ id: "T-0010", agent: "code-small", title: "Collision test" },
+		]);
+
+		// First call — creates M-0001-T-0010, M-0002-T-0010
+		const first = mergerPrepareLocked({
+			runId: "run-m-collision",
+			taskId: "T-0010",
+			conflictedFiles: ["src/a.js", "src/b.js"],
+			projectDir,
+		});
+		expect(first.merge_ids[0]).toBe("M-0001-T-0010");
+		expect(first.merge_ids[1]).toBe("M-0002-T-0010");
+
+		// Second call — existing dirs M-0001 and M-0002 already exist, so next should start at M-0003
+		const second = mergerPrepareLocked({
+			runId: "run-m-collision",
+			taskId: "T-0010",
+			conflictedFiles: ["src/c.js"],
+			projectDir,
+		});
+		expect(second.merge_ids[0]).toBe("M-0003-T-0010");
+	});
 });
 
 describe("mergerPrepare", () => {

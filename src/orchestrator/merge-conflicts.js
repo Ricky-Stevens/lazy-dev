@@ -12,7 +12,7 @@
 //     (prints dispatch info for one merger invocation)
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
 import { withRunLock } from "../mcp/_lock.js";
@@ -48,9 +48,16 @@ export function mergerPrepareLocked({ runId, taskId, conflictedFiles, projectDir
 	const mergesDir = join(runDir, "merges");
 	mkdirSync(mergesDir, { recursive: true });
 
+	const existingMax = readdirSync(mergesDir).reduce((max, name) => {
+		const m = /^M-(\d{4})-/.exec(name);
+		if (!m) return max;
+		const n = Number.parseInt(m[1], 10);
+		return n > max ? n : max;
+	}, 0);
+
 	const mergeIds = [];
 	for (let i = 0; i < conflictedFiles.length; i++) {
-		const mergeId = `M-${String(i + 1).padStart(4, "0")}-${taskId}`;
+		const mergeId = `M-${String(existingMax + i + 1).padStart(4, "0")}-${taskId}`;
 		const mdir = join(mergesDir, mergeId);
 		mkdirSync(mdir, { recursive: true });
 		const envelope = {

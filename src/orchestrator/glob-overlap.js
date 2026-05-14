@@ -24,30 +24,9 @@ export function globsMayOverlap(a, b) {
 			const starSide = x === "**" ? aParts : bParts;
 			const otherSide = x === "**" ? bParts : aParts;
 			const afterStar = starSide.slice(i + 1);
-
-			if (afterStar.length > 0) {
-				const otherRemaining = otherSide.slice(i);
-				let anyAlign = false;
-				for (let off = 0; off <= otherRemaining.length - afterStar.length; off++) {
-					let ok = true;
-					for (let k = 0; k < afterStar.length; k++) {
-						const sp = afterStar[k];
-						const op = otherRemaining[off + k];
-						if (sp === "**" || op === "**") {
-							ok = true;
-							break;
-						}
-						if (sp === op || partMatchesSingle(sp, op) || partMatchesSingle(op, sp)) continue;
-						ok = false;
-						break;
-					}
-					if (ok) {
-						anyAlign = true;
-						break;
-					}
-				}
-				if (!anyAlign) return false;
-			}
+			if (afterStar.length === 0) return true;
+			const otherRemaining = otherSide.slice(i);
+			if (!starSuffixAligns(afterStar, otherRemaining)) return false;
 			return true;
 		}
 		if (x === y) continue;
@@ -55,6 +34,30 @@ export function globsMayOverlap(a, b) {
 		return false;
 	}
 	if (aParts.length === bParts.length) return true;
+	return trailingStarCoversShortSide(aParts, bParts, n);
+}
+
+// Returns true if the longer array's element at index n is ** with nothing after it,
+// meaning it matches the empty remainder of the shorter array.
+function trailingStarCoversShortSide(aParts, bParts, n) {
+	const longerParts = aParts.length > bParts.length ? aParts : bParts;
+	if (longerParts[n] !== "**") return false;
+	return longerParts.slice(n + 1).length === 0;
+}
+
+function starSuffixAligns(afterStar, otherRemaining) {
+	for (let off = 0; off <= otherRemaining.length - afterStar.length; off++) {
+		let ok = true;
+		for (let k = 0; k < afterStar.length; k++) {
+			const sp = afterStar[k];
+			const op = otherRemaining[off + k];
+			if (sp === "**" || op === "**") break;
+			if (sp === op || partMatchesSingle(sp, op) || partMatchesSingle(op, sp)) continue;
+			ok = false;
+			break;
+		}
+		if (ok) return true;
+	}
 	return false;
 }
 

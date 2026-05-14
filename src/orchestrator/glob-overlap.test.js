@@ -49,6 +49,10 @@ describe("globsMayOverlap", () => {
 	test("different lengths without globstar", () => {
 		expect(globsMayOverlap("src/a", "src/a/b")).toBe(false);
 	});
+
+	test("** at end of pattern overlaps a literal directory name", () => {
+		expect(globsMayOverlap("src/foo/**", "src/foo")).toBe(true);
+	});
 });
 
 describe("globsIntersect", () => {
