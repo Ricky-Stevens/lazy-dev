@@ -22,6 +22,8 @@
 //   { kind: "empty" }
 //       → no tasks (should not happen if validator ran)
 
+const MAX_PARALLEL_CAP = 8;
+
 export function scheduleNext({ tasks, statuses, maxParallel = 3 }) {
 	if (!tasks || tasks.length === 0) return { kind: "empty" };
 
@@ -40,11 +42,20 @@ export function scheduleNext({ tasks, statuses, maxParallel = 3 }) {
 		else if (s === "approved") approved.push(t.id);
 	}
 
-	// If anything failed, surface immediately — no new dispatches, even if
-	// parallelism has slack and unrelated tasks could proceed.
-	if (failed.length) return { kind: "blocked", failed };
+	// Only block tasks that transitively depend on a failed task. Independent
+	// branches continue even when an unrelated task fails.
+	if (failed.length) {
+		const failedSet = new Set(failed);
+		const dependsOnFailed = (t) => (t.depends_on || []).some((d) => failedSet.has(d));
+		const stillViable = pending.filter((t) => !dependsOnFailed(t));
+		if (stillViable.length === 0 && running.length === 0) {
+			return { kind: "blocked", failed };
+		}
+		// Fall through — eligible filter below will skip tasks blocked by deps.
+	}
 
 	if (pending.length === 0 && running.length === 0) {
+		if (failed.length > 0) return { kind: "blocked", failed };
 		return { kind: "done_specialists" };
 	}
 
@@ -53,7 +64,15 @@ export function scheduleNext({ tasks, statuses, maxParallel = 3 }) {
 		(t.depends_on || []).every((d) => status(d) === "approved"),
 	);
 
-	const slots = Math.max(0, maxParallel - running.length);
+	// Auto-scale: when all eligible tasks have no dependencies, allow up to
+	// MAX_PARALLEL_CAP instead of the configured maxParallel. This prevents
+	// embarrassingly-parallel plans from being artificially throttled.
+	const allIndependent = eligible.every((t) => !t.depends_on || t.depends_on.length === 0);
+	const effectiveMax = allIndependent
+		? Math.min(Math.max(maxParallel, eligible.length), MAX_PARALLEL_CAP)
+		: maxParallel;
+
+	const slots = Math.max(0, effectiveMax - running.length);
 	const toDispatch = eligible.slice(0, slots);
 
 	if (toDispatch.length > 0) {
