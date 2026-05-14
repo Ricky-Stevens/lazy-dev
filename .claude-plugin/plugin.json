@@ -1,0 +1,11 @@
+{
+  "name": "lazy-dev",
+  "version": "0.1.0",
+  "description": "Claude Code plugin for big tasks. Plans, decomposes, fans out to right-sized specialists, reviews, and merges — while your main thread stays free.",
+  "mcpServers": {
+    "lazy-dev": {
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp/server.js"]
+    }
+  }
+}

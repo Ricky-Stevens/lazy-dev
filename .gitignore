@@ -1,0 +1,15 @@
+# Runtime state
+.lazy-dev/
+node_modules/
+
+# Dev tooling
+CLAUDE.md
+.claude/
+.context-guardian/
+.serena/
+.idea/
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
