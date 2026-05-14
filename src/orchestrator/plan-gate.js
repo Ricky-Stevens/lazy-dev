@@ -21,13 +21,27 @@ export function planIsSimple(tasks, cfg = {}) {
 	const envOverride = process.env.LAZY_DEV_APPROVAL;
 	if (envOverride === "required") return false;
 	if (envOverride === "skip") return true;
+	if (envOverride && envOverride !== "required" && envOverride !== "skip") {
+		console.error(
+			`LAZY_DEV_APPROVAL="${envOverride}" is not a recognized value (expected "required" or "skip"); ignoring`,
+		);
+	}
 	const threshold = cfg.approval || {};
 	const maxTasks = threshold.auto_approve_max_tasks ?? 3;
 	const gateAgents = new Set(
 		threshold.require_gate_agents || ["code-big", "code-big-low", "code-big-high"],
 	);
 	if (!Array.isArray(tasks) || tasks.length === 0) return true;
-	if (tasks.length > maxTasks) return false;
+	// Any task using a gate-required agent forces the gate regardless of count.
 	if (tasks.some((t) => gateAgents.has(t.agent))) return false;
-	return true;
+	// Small plans auto-approve under the threshold.
+	if (tasks.length <= maxTasks) return true;
+	// Larger plans auto-approve if every task uses a low-risk agent (code-small*,
+	// research, docs, format) — the risk profile is the same as a small plan.
+	const lowRiskPrefix = ["code-small", "research", "docs", "format"];
+	const allLowRisk = tasks.every((t) =>
+		lowRiskPrefix.some((p) => t.agent === p || t.agent?.startsWith(`${p}-`)),
+	);
+	if (allLowRisk) return true;
+	return false;
 }
