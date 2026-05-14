@@ -192,13 +192,23 @@ function specialistsPhase(ctx) {
 }
 
 function reviewPhase(ctx) {
-	const { runDir, status } = ctx;
+	const { runDir, runId, projectDir, status } = ctx;
 	const reviewPath = join(runDir, "review.md");
 	if (!existsSync(reviewPath)) return { phase: "review", action: "dispatch_reviewer" };
 
+	const reviewSize = statSync(reviewPath).size;
+	if (reviewSize > 2 * 1024 * 1024) {
+		return {
+			phase: "error",
+			action: "surface",
+			detail: `review.md is ${(reviewSize / 1024 / 1024).toFixed(1)} MB — refusing to parse; likely corrupt`,
+		};
+	}
 	const md = readFileSync(reviewPath, "utf8");
 	const verdict = parseReviewVerdict(md);
 	const currentPass = Number(status.review_pass || 0);
+	const cfg = readRunConfig(projectDir, runId);
+	const maxRetries = cfg.review?.max_retries ?? DEFAULT_MAX_REVIEW_RETRIES;
 
 	if (verdict === "PASS_ALL") {
 		advancePhase(ctx, "merge");
@@ -211,7 +221,7 @@ function reviewPhase(ctx) {
 			.filter(([, v]) => v === "CHANGES_REQUESTED")
 			.map(([id]) => id);
 
-		if (currentPass >= MAX_REVIEW_RETRIES) {
+		if (currentPass >= maxRetries) {
 			return {
 				phase: "error",
 				action: "surface",
@@ -255,6 +265,7 @@ function buildStatuses(ctx, tasks) {
 
 function detectTaskStatus(ctx, taskId) {
 	const taskDir = join(ctx.runDir, "tasks", taskId);
+	// Check terminal markers first — they're the final state regardless of envelope.
 	if (existsSync(join(taskDir, "RETRY"))) return "pending";
 	if (existsSync(join(taskDir, "APPROVED"))) return "approved";
 	if (existsSync(join(taskDir, "FAILED"))) return "failed";
