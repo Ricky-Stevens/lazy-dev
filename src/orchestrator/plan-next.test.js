@@ -52,12 +52,24 @@ describe("planPhase auto-approval", () => {
 		expect(existsSync(join(runDir, "approval.md"))).toBe(false);
 	});
 
-	test("plan with >3 tasks emits show_gate", () => {
+	test("plan with >3 low-risk tasks auto-approves", () => {
 		writePlan([
 			simpleTask("T-0001"),
 			simpleTask("T-0002"),
 			simpleTask("T-0003"),
 			simpleTask("T-0004"),
+		]);
+		const result = planNext({ runId, projectDir });
+		expect(result.action).toBe("dispatch");
+		expect(existsSync(join(runDir, "approval.md"))).toBe(true);
+	});
+
+	test("plan with >3 non-low-risk tasks emits show_gate", () => {
+		writePlan([
+			simpleTask("T-0001", "code-big"),
+			simpleTask("T-0002", "code-big"),
+			simpleTask("T-0003", "code-big"),
+			simpleTask("T-0004", "code-big"),
 		]);
 		const result = planNext({ runId, projectDir });
 		expect(result.action).toBe("show_gate");
