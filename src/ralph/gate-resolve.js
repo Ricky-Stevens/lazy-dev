@@ -138,7 +138,7 @@ export function resolveBaseRef(worktree, envelope) {
 // Checks changed files against allowed_paths globs. Returns
 // { diffHash, violation: string[]|null }.
 export function checkScope(worktree, gitBaseRef, allowedPaths) {
-	if (!gitBaseRef) return { diffHash: null, violation: null };
+	if (!gitBaseRef) return { diffHash: null, violation: null, _changedFiles: null };
 	try {
 		const diffOut = execFileSync("git", ["diff", `${gitBaseRef}...HEAD`], {
 			cwd: worktree,
@@ -147,8 +147,6 @@ export function checkScope(worktree, gitBaseRef, allowedPaths) {
 			maxBuffer: 10 * 1024 * 1024,
 		});
 		const diffHash = cheapHash(diffOut);
-
-		if (allowedPaths.length === 0) return { diffHash, violation: null };
 
 		const changedFiles = execFileSync("git", ["diff", "--name-only", `${gitBaseRef}...HEAD`], {
 			cwd: worktree,
@@ -160,14 +158,22 @@ export function checkScope(worktree, gitBaseRef, allowedPaths) {
 			.map((s) => s.trim())
 			.filter(Boolean);
 
+		if (allowedPaths.length === 0)
+			return { diffHash, violation: null, _changedFiles: changedFiles };
+
 		if (changedFiles.length > 0) {
 			const G = getBunGlob();
 			const allowed = allowedPaths.map((p) => new G(p));
 			const outside = changedFiles.filter((f) => !allowed.some((g) => g.match(f)));
-			if (outside.length > 0) return { diffHash, violation: outside };
+			if (outside.length > 0) return { diffHash, violation: outside, _changedFiles: changedFiles };
 		}
-		return { diffHash, violation: null };
-	} catch {
-		return { diffHash: null, violation: null };
+		return { diffHash, violation: null, _changedFiles: changedFiles };
+	} catch (err) {
+		return {
+			diffHash: null,
+			violation: null,
+			_changedFiles: null,
+			error: `git diff failed: ${err.message}`,
+		};
 	}
 }
