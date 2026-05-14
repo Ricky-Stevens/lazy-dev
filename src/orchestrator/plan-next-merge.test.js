@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -109,6 +110,93 @@ describe("mergePhase", () => {
 
 		expect(result.phase).toBe("integration_test");
 		expect(advancedTo).toBe("integration_test");
+	});
+
+	test("skips task when MERGED marker already exists (idempotency)", () => {
+		const pd = join(tmpDir, "mp-idem");
+		const runDir = join(pd, ".lazy-dev", "runs", "run-idem");
+		const taskDir = join(runDir, "tasks", "T-0010");
+		mkdirSync(taskDir, { recursive: true });
+		// Both APPROVED and MERGED exist — worktree.sh must not be invoked
+		writeFileSync(join(taskDir, "APPROVED"), "{}");
+		writeFileSync(join(taskDir, "MERGED"), JSON.stringify({ at: new Date().toISOString() }));
+
+		let advancedTo = null;
+		const ctx = { runDir, runId: "run-idem", projectDir: pd };
+		const result = mergePhase(ctx, {
+			loadTasks: () => [{ id: "T-0010" }],
+			advancePhase: (_ctx, phase) => {
+				advancedTo = phase;
+			},
+		});
+
+		// The task was skipped; no worktree.sh was called; phase advances normally
+		expect(result.phase).toBe("integration_test");
+		// merged list is empty because the task was skipped
+		expect(result.merged).toHaveLength(0);
+		expect(advancedTo).toBe("integration_test");
+	});
+
+	test("surfaces error when conflict path is an absolute path", () => {
+		const pd = join(tmpDir, "mp-badpath-abs");
+		const runDir = join(pd, ".lazy-dev", "runs", "run-badpath-abs");
+		const taskDir = join(runDir, "tasks", "T-0020");
+		mkdirSync(taskDir, { recursive: true });
+		writeFileSync(join(taskDir, "APPROVED"), "{}");
+
+		const fakeRoot = join(tmpDir, "fake-plugin-abs");
+		const fakeOrchestratorDir = join(fakeRoot, "src", "orchestrator");
+		mkdirSync(fakeOrchestratorDir, { recursive: true });
+		const scriptPath = join(fakeOrchestratorDir, "worktree.sh");
+		writeFileSync(scriptPath, "#!/usr/bin/env bash\nprintf '/etc/passwd\\n'\nexit 3\n");
+		execFileSync("chmod", ["+x", scriptPath]);
+
+		const ctx = { runDir, runId: "run-badpath-abs", projectDir: pd };
+		const origRoot = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = fakeRoot;
+		try {
+			const result = mergePhase(ctx, {
+				loadTasks: () => [{ id: "T-0020" }],
+				advancePhase: () => {},
+			});
+			expect(result.phase).toBe("error");
+			expect(result.action).toBe("surface");
+			expect(result.detail).toContain("invalid conflict path");
+		} finally {
+			if (origRoot === undefined) delete process.env.CLAUDE_PLUGIN_ROOT;
+			else process.env.CLAUDE_PLUGIN_ROOT = origRoot;
+		}
+	});
+
+	test("surfaces error when conflict path contains .. traversal", () => {
+		const pd = join(tmpDir, "mp-badpath-dot");
+		const runDir = join(pd, ".lazy-dev", "runs", "run-badpath-dot");
+		const taskDir = join(runDir, "tasks", "T-0030");
+		mkdirSync(taskDir, { recursive: true });
+		writeFileSync(join(taskDir, "APPROVED"), "{}");
+
+		const fakeRoot = join(tmpDir, "fake-plugin-dot");
+		const fakeOrchestratorDir = join(fakeRoot, "src", "orchestrator");
+		mkdirSync(fakeOrchestratorDir, { recursive: true });
+		const scriptPath = join(fakeOrchestratorDir, "worktree.sh");
+		writeFileSync(scriptPath, "#!/usr/bin/env bash\nprintf '../../../etc/passwd\\n'\nexit 3\n");
+		execFileSync("chmod", ["+x", scriptPath]);
+
+		const ctx = { runDir, runId: "run-badpath-dot", projectDir: pd };
+		const origRoot = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = fakeRoot;
+		try {
+			const result = mergePhase(ctx, {
+				loadTasks: () => [{ id: "T-0030" }],
+				advancePhase: () => {},
+			});
+			expect(result.phase).toBe("error");
+			expect(result.action).toBe("surface");
+			expect(result.detail).toContain("invalid conflict path");
+		} finally {
+			if (origRoot === undefined) delete process.env.CLAUDE_PLUGIN_ROOT;
+			else process.env.CLAUDE_PLUGIN_ROOT = origRoot;
+		}
 	});
 });
 
