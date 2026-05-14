@@ -23,62 +23,69 @@ export function dispatch({ runId, taskId, projectDir }) {
 	requireSafeId(taskId, "task_id");
 
 	const runDir = join(projectDir, ".lazy-dev", "runs", runId);
-	return withRunLock(runDir, () => {
+
+	// Read plan and validate under lock (fast — no subprocesses).
+	const { task, deps } = withRunLock(runDir, () => {
 		const tasksJsonPath = join(runDir, "tasks.json");
 		if (!existsSync(tasksJsonPath)) {
 			throw new Error(`tasks.json missing at ${tasksJsonPath}; planner must run first`);
 		}
 		const plan = readJsonSafe(tasksJsonPath);
 		if (!plan) throw new Error(`tasks.json is corrupt or unreadable at ${tasksJsonPath}`);
-		const task = plan.tasks?.find((t) => t.id === taskId);
-		if (!task) throw new Error(`task ${taskId} not found in run state`);
+		const t = plan.tasks?.find((t) => t.id === taskId);
+		if (!t) throw new Error(`task ${taskId} not found in run state`);
 
-		const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
-
-		// Merge approved dependencies into main BEFORE creating this task's
-		// worktree. `git worktree add ... HEAD` branches from main, so merging
-		// deps first means a dependent worktree inherits them.
-		const deps = task.depends_on || [];
-		for (const depId of deps) {
-			const depApproved = existsSync(join(runDir, "tasks", depId, "APPROVED"));
-			if (!depApproved) {
+		const d = t.depends_on || [];
+		for (const depId of d) {
+			if (!existsSync(join(runDir, "tasks", depId, "APPROVED"))) {
 				throw new Error(
 					`dependency ${depId} not approved; scheduler should not have released ${taskId}`,
 				);
 			}
-			try {
-				execFileSync(
-					"bash",
-					[join(pluginRoot, "src/orchestrator/worktree.sh"), "merge", runId, depId],
-					{
-						encoding: "utf8",
-						cwd: projectDir,
-						stdio: ["ignore", "pipe", "pipe"],
-						timeout: 10 * 60_000,
-						maxBuffer: 10 * 1024 * 1024,
-					},
-				);
-			} catch (err) {
-				if (err.status === 3) {
-					throw new Error(
-						`cannot dispatch ${taskId}: merging dependency ${depId} produced conflicts — resolve first`,
-					);
-				}
-				throw new Error(`failed to merge dependency ${depId}: ${err.message}`);
-			}
 		}
+		return { task: t, deps: d };
+	});
 
-		const worktreePath = execFileSync(
-			"bash",
-			[join(pluginRoot, "src/orchestrator/worktree.sh"), "create", runId, taskId],
-			{
-				encoding: "utf8",
-				cwd: projectDir,
-				timeout: 2 * 60_000,
-				maxBuffer: 1 * 1024 * 1024,
-			},
-		).trim();
+	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
 
+	// Git operations run outside the lock — these are per-task and don't
+	// conflict with other independent tasks being dispatched concurrently.
+	for (const depId of deps) {
+		try {
+			execFileSync(
+				"bash",
+				[join(pluginRoot, "src/orchestrator/worktree.sh"), "merge", runId, depId],
+				{
+					encoding: "utf8",
+					cwd: projectDir,
+					stdio: ["ignore", "pipe", "pipe"],
+					timeout: 10 * 60_000,
+					maxBuffer: 10 * 1024 * 1024,
+				},
+			);
+		} catch (err) {
+			if (err.status === 3) {
+				throw new Error(
+					`cannot dispatch ${taskId}: merging dependency ${depId} produced conflicts — resolve first`,
+				);
+			}
+			throw new Error(`failed to merge dependency ${depId}: ${err.message}`);
+		}
+	}
+
+	const worktreePath = execFileSync(
+		"bash",
+		[join(pluginRoot, "src/orchestrator/worktree.sh"), "create", runId, taskId],
+		{
+			encoding: "utf8",
+			cwd: projectDir,
+			timeout: 2 * 60_000,
+			maxBuffer: 1 * 1024 * 1024,
+		},
+	).trim();
+
+	// Write envelope under lock (fast — no subprocesses).
+	return withRunLock(runDir, () => {
 		const taskDir = join(runDir, "tasks", taskId);
 		mkdirSync(taskDir, { recursive: true });
 		const envelopePath = join(taskDir, "envelope.json");
@@ -100,7 +107,6 @@ export function dispatch({ runId, taskId, projectDir }) {
 				run_id: runId,
 				task_id: taskId,
 				worktree_path: worktreePath,
-				// Preserve the first dispatched_at if present; this is a retry dispatch.
 				dispatched_at: existing.dispatched_at || dispatchedAt,
 				redispatched_at: existing.dispatched_at ? dispatchedAt : undefined,
 			};
