@@ -1,7 +1,15 @@
 // gate-telemetry.js — usage recording and model/effort verification for the
 // Ralph gate. Extracted from gate.js.
 
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+	closeSync,
+	existsSync,
+	openSync,
+	readFileSync,
+	readSync,
+	renameSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -128,10 +136,10 @@ const MODEL_SCAN_BYTES = 8 * 1024;
 function extractModelFromTranscript(transcriptPath) {
 	try {
 		if (!existsSync(transcriptPath)) return {};
-		const fd = require("node:fs").openSync(transcriptPath, "r");
+		const fd = openSync(transcriptPath, "r");
 		const buf = Buffer.alloc(MODEL_SCAN_BYTES);
-		const bytesRead = require("node:fs").readSync(fd, buf, 0, MODEL_SCAN_BYTES, 0);
-		require("node:fs").closeSync(fd);
+		const bytesRead = readSync(fd, buf, 0, MODEL_SCAN_BYTES, 0);
+		closeSync(fd);
 		const content = buf.toString("utf8", 0, bytesRead);
 		for (const line of content.split("\n")) {
 			if (!line.trim()) continue;
