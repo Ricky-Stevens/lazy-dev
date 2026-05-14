@@ -32,7 +32,6 @@ export async function readStdinJson(projectDir) {
 		});
 		const to = setTimeout(() => {
 			if (buf.trim()) {
-				logPayload(projectDir, buf);
 				try {
 					finish(JSON.parse(buf));
 				} catch {
@@ -44,7 +43,6 @@ export async function readStdinJson(projectDir) {
 		process.stdin.on("end", () => {
 			clearTimeout(to);
 			if (!buf.trim()) return finish(null);
-			logPayload(projectDir, buf);
 			try {
 				finish(JSON.parse(buf));
 			} catch {
@@ -54,11 +52,12 @@ export async function readStdinJson(projectDir) {
 	});
 }
 
-function logPayload(projectDir, raw) {
+export function logPayload(projectDir, data) {
 	try {
 		const logDir = join(projectDir, ".lazy-dev", "runs", "_gate-log");
 		mkdirSync(logDir, { recursive: true });
 		const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+		const raw = typeof data === "string" ? data : JSON.stringify(data);
 		writeFileSync(join(logDir, `${stamp}-${process.pid}.payload.json`), raw);
 	} catch {
 		// Best-effort; must not block the gate decision.
