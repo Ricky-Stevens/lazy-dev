@@ -104,14 +104,24 @@ export function snapshotForRun(projectDir, runId, overrides = {}) {
 	return resolved;
 }
 
+const runConfigCache = new Map();
+
 export function readRunConfig(projectDir, runId) {
+	const key = `${projectDir}:${runId}`;
+	if (runConfigCache.has(key)) return runConfigCache.get(key);
 	const path = join(projectDir, ".lazy-dev", "runs", runId, "config.json");
-	if (!existsSync(path)) return resolveSettings(projectDir);
-	try {
-		return JSON.parse(readFileSync(path, "utf8"));
-	} catch {
-		return resolveSettings(projectDir);
+	let cfg;
+	if (!existsSync(path)) {
+		cfg = resolveSettings(projectDir);
+	} else {
+		try {
+			cfg = JSON.parse(readFileSync(path, "utf8"));
+		} catch {
+			cfg = resolveSettings(projectDir);
+		}
 	}
+	runConfigCache.set(key, cfg);
+	return cfg;
 }
 
 // ── helpers ──
