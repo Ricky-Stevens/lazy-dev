@@ -200,6 +200,23 @@ function writeAtomic(path, text) {
 
 const STALE_LOCK_MS = 5_000;
 
+// Exported so other modules can reuse the exact lock semantics.
+// Calls fn() synchronously while holding the lock on `lockPath`;
+// releases in finally. Both acquire() and fn() must be synchronous —
+// this mirrors the pattern used by recordUsage internally.
+export function withUsageLock(lockPath, fn) {
+	let fd = null;
+	try {
+		fd = acquire(lockPath, 2000);
+		return fn();
+	} finally {
+		if (fd !== null) closeSync(fd);
+		try {
+			rmSync(lockPath, { force: true });
+		} catch {}
+	}
+}
+
 function acquire(lock, timeoutMs) {
 	const deadline = Date.now() + timeoutMs;
 	let backoff = 2;

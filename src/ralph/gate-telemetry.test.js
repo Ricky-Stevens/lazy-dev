@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordAgentUsage, updateUsageIteration } from "./gate-telemetry.js";
@@ -136,6 +136,39 @@ describe("updateUsageIteration", () => {
 		const runDir = makeRunDir(pd, "r-iter2");
 		writeFileSync(join(runDir, "usage.json"), JSON.stringify({ totals: {} }));
 		updateUsageIteration(pd, "r-iter2", "agent-1", 2);
+	});
+});
+
+describe("updateUsageIteration — lock safety", () => {
+	test("sequential calls produce a coherent final document and release the lock", () => {
+		const pd = join(tmpDir, "lock-safety");
+		const runDir = makeRunDir(pd, "r-lock");
+		const usagePath = join(runDir, "usage.json");
+		writeFileSync(
+			usagePath,
+			JSON.stringify({
+				totals: {},
+				by_agent: {},
+				by_iteration: [
+					{ agent_id: "agent-a", iteration: 1 },
+					{ agent_id: "agent-b", iteration: 1 },
+				],
+			}),
+		);
+
+		// Each call acquires and releases the lock before the next call.
+		updateUsageIteration(pd, "r-lock", "agent-a", 2);
+		updateUsageIteration(pd, "r-lock", "agent-b", 3);
+
+		// Lock file must be released after both calls.
+		expect(existsSync(`${usagePath}.lock`)).toBe(false);
+
+		// Both iterations must be updated coherently (no lost write).
+		const final = JSON.parse(readFileSync(usagePath, "utf8"));
+		const a = final.by_iteration.find((e) => e.agent_id === "agent-a");
+		const b = final.by_iteration.find((e) => e.agent_id === "agent-b");
+		expect(a.iteration).toBe(2);
+		expect(b.iteration).toBe(3);
 	});
 });
 
