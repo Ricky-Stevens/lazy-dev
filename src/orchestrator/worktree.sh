@@ -100,29 +100,60 @@ bootstrap() {
     fi
   done
 
-  # Symlink node_modules from the source project if it exists — avoids
-  # running a full install in every worktree. Git worktrees share the same
-  # lockfile, so the source project's node_modules is compatible.
-  if [ -d "${src_dir}/node_modules" ] && [ ! -e "${wt_dir}/node_modules" ]; then
-    ln -s "${src_dir}/node_modules" "${wt_dir}/node_modules" 2>/dev/null || true
-  fi
+  # Share dependency directories from the parent project via symlinks.
+  # These are gitignored, don't change between worktrees (all branch from
+  # the same HEAD with the same lockfile), and are read-only during normal
+  # specialist work. If a specialist installs a new dep, the symlink means
+  # it lands in the shared dir — acceptable for a short-lived worktree.
+  #
+  # Language-specific: only symlink what exists in the parent. Unknown
+  # ecosystems get no symlink and fall through to the install path.
+  share_dep_dir "${src_dir}" "${wt_dir}" "node_modules"        # JS (npm/yarn/bun)
+  share_dep_dir "${src_dir}" "${wt_dir}" ".venv"               # Python virtualenv
+  share_dep_dir "${src_dir}" "${wt_dir}" "vendor"              # Go vendor / PHP composer
+  share_dep_dir "${src_dir}" "${wt_dir}" "target"              # Rust cargo
+  share_dep_dir "${src_dir}" "${wt_dir}" ".bundle"             # Ruby bundler
 
-  # Only run install if there's no node_modules (symlink or real).
-  if [ -e "${wt_dir}/node_modules" ]; then
+  # pnpm uses a global content-addressable store — symlinks don't work for
+  # node_modules, but the store itself is shared. Just run install; pnpm's
+  # hardlink strategy makes it near-instant when the store is warm.
+
+  # Only run install if no dep directory exists (symlink or real).
+  # This covers the case where the parent has no installed deps.
+  if has_deps "${wt_dir}"; then
     return 0
   fi
 
-  # Fallback: run install command if a lockfile exists.
+  # Fallback: run the appropriate install command.
   if [ -f "${wt_dir}/bun.lockb" ] || [ -f "${wt_dir}/bun.lock" ]; then
     ( cd "$wt_dir" && bun install --frozen-lockfile 2>&1 ) >&2 || true
+  elif [ -f "${wt_dir}/pnpm-lock.yaml" ]; then
+    ( cd "$wt_dir" && pnpm install --frozen-lockfile 2>&1 ) >&2 || true
   elif [ -f "${wt_dir}/package-lock.json" ]; then
     ( cd "$wt_dir" && npm ci --prefer-offline 2>&1 ) >&2 || true
   elif [ -f "${wt_dir}/yarn.lock" ]; then
     ( cd "$wt_dir" && yarn install --frozen-lockfile 2>&1 ) >&2 || true
-  elif [ -f "${wt_dir}/pnpm-lock.yaml" ]; then
-    ( cd "$wt_dir" && pnpm install --frozen-lockfile 2>&1 ) >&2 || true
+  elif [ -f "${wt_dir}/requirements.txt" ] || [ -f "${wt_dir}/pyproject.toml" ]; then
+    if [ -d "${wt_dir}/.venv" ]; then
+      return 0
+    fi
   fi
-  # No lockfile = no install needed (or project doesn't use node).
+}
+
+share_dep_dir() {
+  local src="$1" dst="$2" name="$3"
+  if [ -d "${src}/${name}" ] && [ ! -e "${dst}/${name}" ]; then
+    ln -s "${src}/${name}" "${dst}/${name}" 2>/dev/null || true
+  fi
+}
+
+has_deps() {
+  local dir="$1"
+  [ -e "${dir}/node_modules" ] || \
+  [ -e "${dir}/.venv" ] || \
+  [ -e "${dir}/vendor" ] || \
+  [ -e "${dir}/target" ] || \
+  [ -e "${dir}/.bundle" ]
 }
 
 commit() {
