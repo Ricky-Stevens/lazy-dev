@@ -125,6 +125,192 @@ describe("runVerifiers — file_exists", () => {
 	});
 });
 
+describe("runVerifiers — error handling", () => {
+	test("unknown verifier kind returns failure", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "unk", kind: "UNKNOWN" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("unknown verifier kind");
+	});
+
+	test("exception in verifier is caught and reported", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "bad", kind: "shell" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("missing cmd");
+	});
+
+	test("empty criteria returns empty results", () => {
+		const r = runVerifiers({ criteria: [], cwd });
+		expect(r).toEqual([]);
+	});
+});
+
+describe("runVerifiers — shell edge cases", () => {
+	test("shell verifier with empty cmd string", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "e", kind: "shell", cmd: "   " }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("empty");
+	});
+
+	test("shell verifier passes with custom must_exit=0 on success", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "x", kind: "shell", cmd: "true", must_exit: 0 }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(true);
+		expect(r[0].details).toContain("exit=0");
+	});
+
+	test("shell verifier uses verifier override when available", () => {
+		const verifierDir = join(cwd, ".lazy-dev", "verifiers");
+		mkdirSync(verifierDir, { recursive: true });
+		writeFileSync(join(verifierDir, "mycheck.sh"), "#!/bin/bash\nexit 0\n");
+		execSync(`chmod +x ${join(verifierDir, "mycheck.sh")}`);
+
+		const r = runVerifiers({
+			criteria: [{ id: "ov", kind: "shell", cmd: "mycheck" }],
+			cwd,
+			projectDir: cwd,
+		});
+		expect(r[0].passed).toBe(true);
+	});
+});
+
+describe("runVerifiers — grep edge cases", () => {
+	test("grep missing pattern returns failure", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "gp", kind: "grep", in_file: "a.txt" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("missing pattern");
+	});
+
+	test("grep rejects path traversal in in_file", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "gt", kind: "grep", pattern: "x", in_file: "../etc/passwd" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("path traversal");
+	});
+
+	test("grep rejects path traversal in in_glob", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "gt", kind: "grep", pattern: "x", in_glob: "../../**" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("path traversal");
+	});
+
+	test("grep with neither in_file nor in_glob fails", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "gn", kind: "grep", pattern: "x" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("in_file or in_glob");
+	});
+
+	test("must_match defaults to true", () => {
+		writeFileSync(join(cwd, "test.txt"), "hello");
+		const r = runVerifiers({
+			criteria: [{ id: "gd", kind: "grep", pattern: "hello", in_file: "test.txt" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(true);
+	});
+
+	test("must_match=false fails when pattern is found", () => {
+		writeFileSync(join(cwd, "test.txt"), "hello");
+		const r = runVerifiers({
+			criteria: [{ id: "gf", kind: "grep", pattern: "hello", in_file: "test.txt", must_match: false }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].failure_signature).toBeTruthy();
+	});
+
+	test("grep with in_glob matches multiple files", () => {
+		writeFileSync(join(cwd, "a.txt"), "target");
+		writeFileSync(join(cwd, "b.txt"), "nope");
+		const r = runVerifiers({
+			criteria: [{ id: "gg", kind: "grep", pattern: "target", in_glob: "*.txt", must_match: true }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(true);
+		expect(r[0].details).toContain("a.txt");
+	});
+
+	test("grep skips files that don't exist", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "gm", kind: "grep", pattern: "x", in_file: "nonexistent.txt", must_match: true }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+	});
+});
+
+describe("runVerifiers — file_exists edge cases", () => {
+	test("file_exists missing path returns failure", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "fp", kind: "file_exists" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("missing path");
+	});
+
+	test("file_exists rejects path traversal", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "ft", kind: "file_exists", path: "../../../etc/passwd" }],
+			cwd,
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("path traversal");
+	});
+
+	test("file_exists produces failure_signature when missing", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "fs", kind: "file_exists", path: "missing.txt" }],
+			cwd,
+		});
+		expect(r[0].failure_signature).toBeTruthy();
+	});
+});
+
+describe("runVerifiers — diff_scope edge cases", () => {
+	test("diff_scope without gitBaseRef fails", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "ds", kind: "diff_scope" }],
+			cwd,
+			scopeAllowedPaths: ["src/**"],
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("gitBaseRef");
+	});
+
+	test("diff_scope fails when git diff fails", () => {
+		const r = runVerifiers({
+			criteria: [{ id: "ds", kind: "diff_scope" }],
+			cwd,
+			scopeAllowedPaths: ["src/**"],
+			gitBaseRef: "nonexistent-ref",
+		});
+		expect(r[0].passed).toBe(false);
+		expect(r[0].details).toContain("git diff failed");
+	});
+});
+
 describe("runVerifiers — diff_scope", () => {
 	function initRepo() {
 		execSync("git init -q && git config user.email a@b.c && git config user.name t", { cwd });

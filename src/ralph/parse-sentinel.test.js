@@ -74,4 +74,64 @@ describe("parseSentinel", () => {
 		const r = parseSentinel("");
 		expect(r.kind).toBe("missing");
 	});
+
+	test("null input returns missing", () => {
+		const r = parseSentinel(null);
+		expect(r.kind).toBe("missing");
+	});
+
+	test("non-string input returns missing", () => {
+		const r = parseSentinel(123);
+		expect(r.kind).toBe("missing");
+	});
+
+	test("empty BLOCKED block returns malformed", () => {
+		const r = parseSentinel("---BLOCKED---\n---END---");
+		expect(r.kind).toBe("malformed");
+		expect(r.detail).toContain("empty");
+	});
+
+	test("COMPLETED with no JSON object returns malformed", () => {
+		const r = parseSentinel("---COMPLETED---\njust plain text\n---END---");
+		expect(r.kind).toBe("malformed");
+		expect(r.detail).toContain("no JSON");
+	});
+
+	test("COMPLETED with array body returns malformed", () => {
+		const r = parseSentinel("---COMPLETED---\n[1,2,3]\n---END---");
+		expect(r.kind).toBe("malformed");
+		expect(r.detail).toContain("JSON object");
+	});
+
+	test("COMPLETED with empty summary returns malformed", () => {
+		const r = parseSentinel('---COMPLETED---\n{"summary":""}\n---END---');
+		expect(r.kind).toBe("malformed");
+		expect(r.detail).toContain("summary");
+	});
+
+	test("COMPLETED with numeric summary returns malformed", () => {
+		const r = parseSentinel('---COMPLETED---\n{"summary":42}\n---END---');
+		expect(r.kind).toBe("malformed");
+		expect(r.detail).toContain("summary");
+	});
+
+	test("BLOCKED takes priority when it appears after COMPLETED", () => {
+		const msg =
+			'---COMPLETED---\n{"summary":"done"}\n---END---\nthen\n---BLOCKED---\nactually stuck\n---END---';
+		const r = parseSentinel(msg);
+		expect(r.kind).toBe("blocked");
+		expect(r.reason).toContain("stuck");
+	});
+
+	test("handles escaped characters in JSON", () => {
+		const msg = '---COMPLETED---\n{"summary":"has \\"quotes\\" and \\\\backslash"}\n---END---';
+		const r = parseSentinel(msg);
+		expect(r.kind).toBe("completed");
+		expect(r.body.summary).toContain("quotes");
+	});
+
+	test("handles unbalanced braces (no closing brace)", () => {
+		const r = parseSentinel('---COMPLETED---\n{"summary":"test\n---END---');
+		expect(r.kind).toBe("malformed");
+	});
 });

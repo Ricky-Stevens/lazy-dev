@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { PLANNER_EFFORTS, plannerDispatch } from "./planner-dispatch.js";
+
+const CLI_PATH = resolve(import.meta.dirname, "planner-dispatch.js");
 
 let projectDir;
 let runId;
@@ -65,5 +68,50 @@ describe("plannerDispatch effort routing", () => {
 	test("throws if brief.md missing", () => {
 		rmSync(join(projectDir, ".lazy-dev", "runs", runId, "brief.md"));
 		expect(() => plannerDispatch({ runId, projectDir })).toThrow(/brief missing/);
+	});
+});
+
+describe("planner-dispatch CLI", () => {
+	test("CLI dispatches planner with default effort", () => {
+		const result = spawnSync("node", [CLI_PATH, runId], {
+			encoding: "utf8",
+			env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir },
+			timeout: 10_000,
+		});
+		const output = JSON.parse(result.stdout.trim());
+		expect(output.ok).toBe(true);
+		expect(output.effort).toBe("high");
+	});
+
+	test("CLI dispatches planner with custom effort", () => {
+		const result = spawnSync("node", [CLI_PATH, runId, "max"], {
+			encoding: "utf8",
+			env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir },
+			timeout: 10_000,
+		});
+		const output = JSON.parse(result.stdout.trim());
+		expect(output.ok).toBe(true);
+		expect(output.effort).toBe("max");
+	});
+
+	test("CLI returns usage error without run_id", () => {
+		const result = spawnSync("node", [CLI_PATH], {
+			encoding: "utf8",
+			env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir },
+			timeout: 10_000,
+		});
+		const output = JSON.parse(result.stdout.trim());
+		expect(output.ok).toBe(false);
+		expect(output.detail).toContain("usage");
+	});
+
+	test("CLI returns error for invalid effort", () => {
+		const result = spawnSync("node", [CLI_PATH, runId, "turbo"], {
+			encoding: "utf8",
+			env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir },
+			timeout: 10_000,
+		});
+		const output = JSON.parse(result.stdout.trim());
+		expect(output.ok).toBe(false);
 	});
 });
