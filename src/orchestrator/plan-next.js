@@ -12,7 +12,7 @@
 // CLI:
 //   node src/orchestrator/plan-next.js <run-id>
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
@@ -26,7 +26,7 @@ import { scheduleNext } from "./schedule.js";
 import { readRunConfig } from "./settings.js";
 import { validatePlan } from "./validate-plan.js";
 
-const MAX_REVIEW_RETRIES = 1;
+const DEFAULT_MAX_REVIEW_RETRIES = 1;
 
 export function planNext({ runId, projectDir }) {
 	requireSafeId(runId, "run_id");
@@ -133,24 +133,27 @@ function specialistsPhase(ctx) {
 	const maxParallel =
 		Number(process.env.AGENT_WRANGLER_MAX_PARALLEL) || cfg.parallelism?.max_parallel || 3;
 
-	const usage = readUsage(projectDir, runId);
-	const runCap = cfg.budget?.per_run || {};
-	if (runCap.max_input_tokens && usage.totals.input_tokens >= runCap.max_input_tokens) {
-		return { phase: "error", action: "surface", detail: "per-run input-token cap reached" };
-	}
-	if (runCap.max_output_tokens && usage.totals.output_tokens >= runCap.max_output_tokens) {
-		return { phase: "error", action: "surface", detail: "per-run output-token cap reached" };
-	}
-
-	let warning = null;
-	const warnPct = cfg.budget?.warn_at_pct ?? 70;
-	if (runCap.max_output_tokens) {
-		const pct = (usage.totals.output_tokens / runCap.max_output_tokens) * 100;
-		if (pct >= warnPct) warning = `output tokens at ${pct.toFixed(0)}% of per-run cap`;
-	}
-
 	const taskStatuses = tasks.map((t) => ({ id: t.id, status: statuses[t.id] }));
 	const next = scheduleNext({ tasks, statuses, maxParallel });
+
+	// Only read usage.json on actionable transitions (dispatch, done, blocked)
+	// — skip the I/O on wait polls where nothing has changed.
+	let warning = null;
+	if (next.kind !== "wait") {
+		const usage = readUsage(projectDir, runId);
+		const runCap = cfg.budget?.per_run || {};
+		if (runCap.max_input_tokens && usage.totals.input_tokens >= runCap.max_input_tokens) {
+			return { phase: "error", action: "surface", detail: "per-run input-token cap reached" };
+		}
+		if (runCap.max_output_tokens && usage.totals.output_tokens >= runCap.max_output_tokens) {
+			return { phase: "error", action: "surface", detail: "per-run output-token cap reached" };
+		}
+		const warnPct = cfg.budget?.warn_at_pct ?? 70;
+		if (runCap.max_output_tokens) {
+			const pct = (usage.totals.output_tokens / runCap.max_output_tokens) * 100;
+			if (pct >= warnPct) warning = `output tokens at ${pct.toFixed(0)}% of per-run cap`;
+		}
+	}
 
 	switch (next.kind) {
 		case "dispatch":
@@ -166,7 +169,6 @@ function specialistsPhase(ctx) {
 				phase: "specialists",
 				action: "wait",
 				running: next.running,
-				tasks: taskStatuses,
 				warning,
 			};
 		case "blocked":
