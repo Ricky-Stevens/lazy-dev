@@ -25,12 +25,32 @@ describe("planIsSimple", () => {
 		expect(planIsSimple(tasks)).toBe(true);
 	});
 
-	test("four tasks is NOT simple (over default threshold)", () => {
+	test("four code-small tasks is still simple (low-risk agents auto-approve)", () => {
 		const tasks = [
 			{ id: "T-0001", agent: "code-small" },
 			{ id: "T-0002", agent: "code-small" },
 			{ id: "T-0003", agent: "code-small" },
 			{ id: "T-0004", agent: "code-small" },
+		];
+		expect(planIsSimple(tasks)).toBe(true);
+	});
+
+	test("four code-big tasks over threshold is NOT simple", () => {
+		const tasks = [
+			{ id: "T-0001", agent: "code-big" },
+			{ id: "T-0002", agent: "code-big" },
+			{ id: "T-0003", agent: "code-big" },
+			{ id: "T-0004", agent: "code-big" },
+		];
+		expect(planIsSimple(tasks)).toBe(false);
+	});
+
+	test("mixed low-risk and high-risk agents over threshold is NOT simple", () => {
+		const tasks = [
+			{ id: "T-0001", agent: "code-small" },
+			{ id: "T-0002", agent: "code-small" },
+			{ id: "T-0003", agent: "code-small" },
+			{ id: "T-0004", agent: "code-big" },
 		];
 		expect(planIsSimple(tasks)).toBe(false);
 	});
