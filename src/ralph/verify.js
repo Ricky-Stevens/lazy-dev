@@ -30,10 +30,11 @@ export function runVerifiers({
 	projectDir,
 	precomputedDiff = null,
 }) {
+	const ctx = { cwd, scopeAllowedPaths, gitBaseRef, projectDir, precomputedDiff };
 	const results = [];
 	for (const c of criteria) {
 		try {
-			results.push(runOne(c, { cwd, scopeAllowedPaths, gitBaseRef, projectDir, precomputedDiff }));
+			results.push(runOne(c, ctx));
 		} catch (err) {
 			results.push({
 				id: c.id,
