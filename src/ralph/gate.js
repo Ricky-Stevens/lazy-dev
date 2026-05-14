@@ -48,8 +48,9 @@ function isPerRunAgent(bareName) {
 }
 
 main().catch((err) => {
+	const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 	try {
-		const log = `${process.env.CLAUDE_PROJECT_DIR || process.cwd()}/.lazy-dev/runs/_gate-log/gate-crash.log`;
+		const log = `${projectDir}/.lazy-dev/runs/_gate-log/gate-crash.log`;
 		mkdirSync(dirname(log), { recursive: true });
 		writeFileSync(log, `${new Date().toISOString()} FATAL: ${err.stack || err.message}\n`, {
 			flag: "a",
@@ -57,7 +58,28 @@ main().catch((err) => {
 	} catch (e) {
 		console.error(`gate crash (log write failed): ${err.message} (${e.message})`);
 	}
-	process.exit(0);
+
+	// Write a FAILED marker if we can resolve the task — prevents the state
+	// machine from seeing the task as "running" forever after a gate crash.
+	try {
+		const resolved = globalThis.__gateResolved;
+		if (resolved?.runId && resolved?.taskId) {
+			const state = new StateStore({
+				projectDir,
+				runId: resolved.runId,
+				taskId: resolved.taskId,
+				kind: "task",
+			});
+			state.markFailed("gate_crash", {
+				error: err.message,
+				stack: err.stack?.split("\n").slice(0, 5).join("\n"),
+			});
+		}
+	} catch {
+		// Best-effort — if this also fails, the crash log is the only trace.
+	}
+
+	process.exit(1);
 });
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: gate orchestration requires branching on many sentinel/verifier states; splitting would obscure the sequential decision logic
@@ -81,6 +103,9 @@ async function main() {
 	const resolved = isPerRun
 		? null
 		: resolveFromSentinel(projectDir, sentinel) || resolveTaskFromCwd(projectDir, payloadCwd);
+
+	// Stash for the crash handler so it can write a FAILED marker on unhandled errors.
+	globalThis.__gateResolved = resolved;
 
 	const usageRunId = isPerRun ? findMostRecentRun(projectDir) : resolved?.runId || null;
 
@@ -168,7 +193,12 @@ async function main() {
 	// 3. SCOPE + DIFF HASH
 	const gitBaseRef = resolveBaseRef(worktree, envelope);
 	const allowedPaths = envelope?.scope?.allowed_paths || [];
-	const { diffHash, violation } = checkScope(worktree, gitBaseRef, allowedPaths);
+	const scopeResult = checkScope(worktree, gitBaseRef, allowedPaths);
+	const { diffHash, violation } = scopeResult;
+
+	if (scopeResult.error) {
+		log(`scope check error: ${scopeResult.error}`);
+	}
 
 	if (violation) {
 		state.recordIteration({
@@ -184,13 +214,14 @@ async function main() {
 		return;
 	}
 
-	// 4. VERIFIERS
+	// 4. VERIFIERS — pass precomputed diff data to avoid a redundant git-diff call
 	const verifierResults = runVerifiers({
 		criteria: envelope?.completion_criteria || [],
 		cwd: worktree,
 		scopeAllowedPaths: allowedPaths,
 		gitBaseRef,
 		projectDir,
+		precomputedDiff: scopeResult._changedFiles,
 	});
 
 	const failing = verifierResults.filter((r) => !r.passed);
