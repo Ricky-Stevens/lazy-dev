@@ -100,7 +100,19 @@ bootstrap() {
     fi
   done
 
-  # Run install command if a lockfile exists (indicates deps are needed).
+  # Symlink node_modules from the source project if it exists — avoids
+  # running a full install in every worktree. Git worktrees share the same
+  # lockfile, so the source project's node_modules is compatible.
+  if [ -d "${src_dir}/node_modules" ] && [ ! -e "${wt_dir}/node_modules" ]; then
+    ln -s "${src_dir}/node_modules" "${wt_dir}/node_modules" 2>/dev/null || true
+  fi
+
+  # Only run install if there's no node_modules (symlink or real).
+  if [ -e "${wt_dir}/node_modules" ]; then
+    return 0
+  fi
+
+  # Fallback: run install command if a lockfile exists.
   if [ -f "${wt_dir}/bun.lockb" ] || [ -f "${wt_dir}/bun.lock" ]; then
     ( cd "$wt_dir" && bun install --frozen-lockfile 2>&1 ) >&2 || true
   elif [ -f "${wt_dir}/package-lock.json" ]; then
