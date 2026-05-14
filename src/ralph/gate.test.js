@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -136,5 +136,71 @@ describe("gate.js subprocess", () => {
 			last_assistant_message: sentinel,
 		});
 		expect(r.status).toBe(0);
+	});
+
+	test("marks oscillation_same_diff when two consecutive iterations produce identical diffHash", () => {
+		// Set up a separate worktree git repo with two commits so HEAD~1 resolves.
+		const wtDir = mkdtempSync(join(tmpdir(), "gate-osc-wt-"));
+		try {
+			execFileSync("git", ["init"], { cwd: wtDir, stdio: "ignore" });
+			execFileSync("git", ["config", "user.email", "test@test.com"], {
+				cwd: wtDir,
+				stdio: "ignore",
+			});
+			execFileSync("git", ["config", "user.name", "Test"], { cwd: wtDir, stdio: "ignore" });
+			writeFileSync(join(wtDir, "base.txt"), "base\n");
+			execFileSync("git", ["add", "."], { cwd: wtDir, stdio: "ignore" });
+			execFileSync("git", ["commit", "-m", "base"], { cwd: wtDir, stdio: "ignore" });
+			writeFileSync(join(wtDir, "work.txt"), "work\n");
+			execFileSync("git", ["add", "."], { cwd: wtDir, stdio: "ignore" });
+			execFileSync("git", ["commit", "-m", "work"], { cwd: wtDir, stdio: "ignore" });
+
+			const taskId = "T-0200";
+			const taskDir = join(runDir, "tasks", taskId);
+			mkdirSync(taskDir, { recursive: true });
+			// A file_exists criterion pointing to a missing file ensures verifiers fail
+			// on every iteration (keeping the gate in retry mode so iteration 2 is reached).
+			writeFileSync(
+				join(taskDir, "envelope.json"),
+				JSON.stringify({
+					id: taskId,
+					task_id: taskId,
+					agent: "code-small",
+					worktree_path: wtDir,
+					budget: { max_iter: 3 },
+					completion_criteria: [
+						{ id: "must_exist", kind: "file_exists", path: "nonexistent-file.txt" },
+					],
+				}),
+			);
+
+			const sentinel = `---COMPLETED---\n${JSON.stringify({ task_id: taskId, summary: "done" })}\n---END---`;
+
+			// Iteration 1 — gate records the first history entry and emits a retry.
+			const r1 = runGate({
+				agent_type: "lazy-dev:code-small",
+				agent_id: "cs-200",
+				cwd: projectDir,
+				last_assistant_message: sentinel,
+			});
+			expect(r1.status).toBe(0);
+			// Should not have written a FAILED marker yet.
+			expect(existsSync(join(taskDir, "FAILED"))).toBe(false);
+
+			// Iteration 2 — identical diffHash triggers oscillation_same_diff.
+			const r2 = runGate({
+				agent_type: "lazy-dev:code-small",
+				agent_id: "cs-200",
+				cwd: projectDir,
+				last_assistant_message: sentinel,
+			});
+			expect(r2.status).toBe(0);
+			// FAILED marker must now exist.
+			expect(existsSync(join(taskDir, "FAILED"))).toBe(true);
+			const failed = JSON.parse(readFileSync(join(taskDir, "FAILED"), "utf8"));
+			expect(failed.reason).toBe("oscillation_same_diff");
+		} finally {
+			rmSync(wtDir, { recursive: true, force: true });
+		}
 	});
 });

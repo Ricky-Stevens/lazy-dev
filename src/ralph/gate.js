@@ -14,7 +14,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { buildRetryPrompt, emitRetry, logDebug, readEnvelope, readStdinJson } from "./gate-io.js";
 import {
 	checkScope,
@@ -50,7 +50,7 @@ function isPerRunAgent(bareName) {
 main().catch((err) => {
 	try {
 		const log = `${process.env.CLAUDE_PROJECT_DIR || process.cwd()}/.lazy-dev/runs/_gate-log/gate-crash.log`;
-		mkdirSync(join(log, ".."), { recursive: true });
+		mkdirSync(dirname(log), { recursive: true });
 		writeFileSync(log, `${new Date().toISOString()} FATAL: ${err.stack || err.message}\n`, {
 			flag: "a",
 		});
@@ -60,6 +60,7 @@ main().catch((err) => {
 	process.exit(0);
 });
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: gate orchestration requires branching on many sentinel/verifier states; splitting would obscure the sequential decision logic
 async function main() {
 	const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 	const payload = await readStdinJson(projectDir);
@@ -207,8 +208,13 @@ async function main() {
 		failingSignature,
 	});
 
+	// Reload after recordIteration so we compare against the persisted history,
+	// not the stale pre-write snapshot. The entry immediately before the one just
+	// written is at index [length - 2].
+	const post = state.load();
+
 	if (iteration >= 2) {
-		const last = prev.history[prev.history.length - 1];
+		const last = post.history[post.history.length - 2];
 		if (policy.same_diff_twice === "stop" && last?.diff_hash && last.diff_hash === diffHash) {
 			state.markFailed("oscillation_same_diff", { iteration, diff_hash: diffHash });
 			return;
