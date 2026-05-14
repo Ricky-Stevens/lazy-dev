@@ -102,6 +102,8 @@ export function findMostRecentRun(projectDir) {
 }
 
 export function resolveBaseRef(worktree, envelope) {
+	// Try branch^ first — this is the common case for worktrees created by
+	// dispatch.js, which always sets worktree_branch on the envelope.
 	if (envelope?.worktree_branch) {
 		const branch = String(envelope.worktree_branch);
 		if (/^[a-zA-Z0-9_./~^@{}-]+$/.test(branch)) {
@@ -109,29 +111,24 @@ export function resolveBaseRef(worktree, envelope) {
 				return execFileSync("git", ["rev-parse", `${branch}^`], {
 					cwd: worktree,
 					encoding: "utf8",
-					timeout: 30_000,
+					timeout: 10_000,
 				}).trim();
 			} catch {
-				// Branch ref parse failure; fall through to merge-base.
+				// Branch ref parse failure; fall through.
 			}
 		}
 	}
+	// Single fallback: HEAD~1. The merge-base call almost never succeeds in
+	// worktrees (no upstream configured) and adds ~200ms of wasted subprocess
+	// time on the hot path.
 	try {
-		return execFileSync("git", ["merge-base", "HEAD", "@{upstream}"], {
+		return execFileSync("git", ["rev-parse", "HEAD~1"], {
 			cwd: worktree,
 			encoding: "utf8",
-			timeout: 30_000,
+			timeout: 10_000,
 		}).trim();
 	} catch {
-		try {
-			return execFileSync("git", ["rev-parse", "HEAD~1"], {
-				cwd: worktree,
-				encoding: "utf8",
-				timeout: 30_000,
-			}).trim();
-		} catch {
-			return null;
-		}
+		return null;
 	}
 }
 

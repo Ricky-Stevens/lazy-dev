@@ -103,22 +103,15 @@ export function reviewVerdict({ runId, projectDir }) {
 }
 
 function resolveBaseRef(worktreePath) {
+	// HEAD~1 is the reliable base for worktrees (no upstream configured).
 	try {
-		return execFileSync("git", ["merge-base", "HEAD", "@{upstream}"], {
+		return execFileSync("git", ["rev-parse", "HEAD~1"], {
 			cwd: worktreePath,
 			encoding: "utf8",
-			timeout: 30_000,
+			timeout: 10_000,
 		}).trim();
 	} catch {
-		try {
-			return execFileSync("git", ["rev-parse", "HEAD~1"], {
-				cwd: worktreePath,
-				encoding: "utf8",
-				timeout: 30_000,
-			}).trim();
-		} catch {
-			return null;
-		}
+		return null;
 	}
 }
 
