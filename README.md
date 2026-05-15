@@ -9,6 +9,39 @@
 
 A Claude Code plugin for big tasks. You keep working in your main thread -- when something needs a plan, decomposition, parallel specialists, and a review, hand it to lazy-dev.
 
+## Install
+
+```bash
+/plugin marketplace add https://github.com/Ricky-Stevens/lazy-dev
+/plugin install lazy-dev
+```
+
+**Note:** Claude's `/reload-plugins` can be a bit sketchy - try opening a new session if you hit issues.
+
+### Update
+
+To pull the latest version:
+
+1. Open `/plugins`
+2. Go to **Marketplaces** tab → select the lazy-dev marketplace → **Update marketplace**
+3. Inside the marketplace, go to **Browse Plugins** → select lazy-dev → **Update**
+4. Run `/reload-plugins` or restart your session
+
+### Uninstall
+
+```bash
+/plugin uninstall lazy-dev
+```
+
+### Local development
+
+```bash
+claude --plugin-dir /path/to/lazy-dev
+```
+
+---
+
+
 ## The problem
 
 Your main Claude Code session is great for quick edits, questions, and focused tasks. But when work gets bigger -- a new feature across multiple files, a refactor, a migration -- you hit friction:
@@ -62,18 +95,6 @@ What lazy-dev specifically does differently:
 
 If you want a framework that transforms your whole workflow, use Superpowers. If you want a lightweight plugin you invoke for big tasks and forget about, use lazy-dev. They can coexist.
 
-## Install
-
-Clone the repo and add it as a Claude Code plugin:
-
-```bash
-git clone https://github.com/Ricky-Stevens/lazy-dev.git
-```
-
-Then point your Claude Code plugin configuration at the cloned directory. The plugin manifest is at `.claude-plugin/plugin.json`.
-
-`/reload-plugins` may not always pick up changes -- try opening a new session if you hit issues.
-
 ## Usage
 
 Three commands.
@@ -99,75 +120,9 @@ lazy-dev will:
 6. Merge results back to your branch (`--no-ff`)
 7. Run integration tests if a test runner is detected
 
-## How it works
-
-```
-/lazy-dev:run <brief>
-  brief  ->  planner (Opus)  ->  master-spec.md + tasks.json
-                              |
-                     approval gate  (auto or manual)
-                              |
-       +-- parallel fan-out (isolated worktrees) --+
-       |  T-0001 code-small      (Sonnet, medium)  |
-       |  T-0002 code-big-high   (Opus, high)      |
-       |  T-0003 docs            (Haiku, low)       |
-       +---- each verified by Ralph gate ----------+
-                              |
-                     reviewer (Opus)
-                              |
-                     merge --no-ff per task
-                              |
-                     integration test (auto-detected)
-                              |
-                     done
-```
-
-**Planner** reads the brief, scans the relevant parts of the repo, and writes a master spec with a task decomposition. Each task specifies an agent (including effort variant), allowed file paths, dependencies, and completion criteria.
-
-**Specialists** run in isolated git worktrees with shared dependency directories (symlinked from the parent project -- node_modules, .venv, vendor, target, .bundle). Each specialist reads its envelope, makes changes, runs verifiers, commits, and emits a completion sentinel.
-
-**Ralph gate** fires on every specialist stop via a `SubagentStop` hook. It checks the sentinel, runs the verifiers from the task's completion criteria, and writes an APPROVED or FAILED marker. Same failure twice stops the task. Same diff twice stops the task. Three iterations max by default.
-
-**Reviewer** reads every task's diff against the master spec. Verdict is one of: PASS_ALL, CHANGES_REQUESTED (auto-retries once by default), or BLOCK (surfaces to the user).
-
-**Merge** applies each approved task's branch with `--no-ff`. If conflicts arise between tasks, a merger agent is dispatched to resolve them.
-
-**Integration test** auto-detects the project's test runner from lockfiles (bun, pnpm, yarn, npm, go, pytest) and runs the test suite against the merged result. Skipped if no test runner is found.
-
-## Configuration
-
-Settings merge in order, later sources override earlier:
-
-1. Plugin defaults (built-in)
-2. `~/.claude/settings.json` under the `lazy-dev` key
-3. `<project>/.claude/settings.json` under the `lazy-dev` key
-4. `<project>/.lazy-dev/settings.json` (standalone, no nesting)
-
-Config is snapshotted at run start. Mid-run edits do not affect an active run.
-
-```jsonc
-{
-  "parallelism": { "max_parallel": 3 },
-  "ralph": { "max_iter": 3 },
-  "budget": {
-    "per_task": { "max_input_tokens": 100000, "max_output_tokens": 20000 },
-    "per_run": { "max_input_tokens": 400000, "max_output_tokens": 80000 },
-    "warn_at_pct": 70
-  },
-  "safety": {
-    "forbidden_paths_global": [".env", ".env.*", "**/*.pem", "**/*.key"]
-  }
-}
-```
-
 ### Custom verifiers
 
 Drop a shell script at `<project>/.lazy-dev/verifiers/<name>.sh` to override a built-in verifier. `<name>` must match the first token of the verifier command (e.g., `lint.sh` overrides the built-in lint verifier). Your script runs with the worktree as cwd.
-
-### Environment overrides
-
-- `LAZY_DEV_APPROVAL=required` -- always require manual approval, even for small plans.
-- `LAZY_DEV_APPROVAL=skip` -- auto-approve all plans.
 
 ## Requirements
 
