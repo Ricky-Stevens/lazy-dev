@@ -12,12 +12,34 @@
 //   node src/orchestrator/dispatch.js <run-id> <task-id>
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { withGitLock } from "../mcp/_git-lock.js";
 import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
 import { withRunLock } from "../mcp/_lock.js";
 import { requireSafeId } from "../mcp/_validation.js";
+
+function resolveAgentMeta(agentName) {
+	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.cwd();
+	const agentFile = join(pluginRoot, "agents", `${agentName}.md`);
+	try {
+		const content = readFileSync(agentFile, "utf8");
+		let model = null;
+		const mm = content.match(/^model:\s*(.+)$/m);
+		if (mm) {
+			const full = mm[1].trim();
+			if (full.includes("opus")) model = "opus";
+			else if (full.includes("sonnet")) model = "sonnet";
+			else if (full.includes("haiku")) model = "haiku";
+		}
+		let effort = null;
+		const em = content.match(/^effort:\s*(.+)$/m);
+		if (em) effort = em[1].trim();
+		return { model, effort };
+	} catch {
+		return { model: null, effort: null };
+	}
+}
 
 export function dispatch({ runId, taskId, projectDir }) {
 	requireSafeId(runId, "run_id");
@@ -122,11 +144,17 @@ export function dispatch({ runId, taskId, projectDir }) {
 
 		rmSync(join(taskDir, "RETRY"), { force: true });
 
-		const dispatchPrompt = `Envelope: ${envelopePath}\nWorktree: ${worktreePath}\n\nRead your envelope and execute your system-prompt contract. Include task_id in the sentinel.`;
-
+		const { model, effort } = resolveAgentMeta(task.agent);
+		const effortLine = effort
+			? `\nEffort: ${effort}${effort === "low" ? " — move fast, this is mechanical work." : effort === "high" ? " — reason carefully, check edge cases." : effort === "max" ? " — this is architecturally critical. Take all the time you need." : "."}`
+			: "";
+		const dispatchPrompt =
+			`Envelope: ${envelopePath}\nWorktree: ${worktreePath}${effortLine}` +
+			"\n\nRead your envelope and execute your system-prompt contract. Include task_id in the sentinel.";
 		return {
 			agent: task.agent,
 			agent_namespaced: `lazy-dev:${task.agent}`,
+			model,
 			task_id: taskId,
 			worktree: worktreePath,
 			envelope_path: envelopePath,

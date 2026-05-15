@@ -9,8 +9,8 @@ export const reviewBuildTool = {
 		"review-prev.md guidance when present. `effort` picks the reviewer variant: 'high' " +
 		"(default, standard review), 'xhigh' (cross-subsystem diffs), 'max' (architectural — " +
 		"expensive). Call when plan_next emits action=dispatch_reviewer. " +
-		"Returns: { agent_namespaced, effort, envelope_path, dispatch_prompt, retry }. " +
-		"Agent-dispatch using agent_namespaced as subagent_type and dispatch_prompt as the prompt.",
+		"Returns: { agent_namespaced, model, effort, envelope_path, dispatch_prompt, retry }. " +
+		"Agent-dispatch using agent_namespaced as subagent_type, model as the model parameter, and dispatch_prompt as the prompt.",
 	inputSchema: {
 		type: "object",
 		additionalProperties: false,

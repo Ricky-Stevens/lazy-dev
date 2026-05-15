@@ -6,8 +6,8 @@ export const dispatchTool = {
 	description:
 		"Prepare a specialist dispatch: merge approved deps into main, create a worktree, " +
 		"write envelope.json. Call for each id in plan_next's dispatch.ids response. " +
-		"Returns: { agent, agent_namespaced, task_id, worktree, envelope_path, dispatch_prompt }. " +
-		"Agent-dispatch using agent_namespaced as subagent_type and dispatch_prompt as the prompt.",
+		"Returns: { agent, agent_namespaced, model, task_id, worktree, envelope_path, dispatch_prompt }. " +
+		"Agent-dispatch using agent_namespaced as subagent_type, model as the model parameter, and dispatch_prompt as the prompt.",
 	inputSchema: {
 		type: "object",
 		additionalProperties: false,

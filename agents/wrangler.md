@@ -50,21 +50,37 @@ Call `mcp__lazy-dev__plan_next({ run_id })` and react to the returned `action`:
 
 | Action | Do |
 |---|---|
-| `dispatch_planner` | Call `mcp__lazy-dev__planner_dispatch({ run_id, effort })` — pick `effort` per the Effort selection table above. Agent-dispatch using the returned `agent_namespaced` as `subagent_type` and `dispatch_prompt` as the prompt. Do NOT hand-write the planner prompt. Loop. |
+| `dispatch_planner` | Call `mcp__lazy-dev__planner_dispatch({ run_id, effort })` — pick `effort` per the Effort selection table above. Then dispatch using the exact pattern below. Do NOT hand-write the planner prompt. Loop. |
 | `show_gate` | Print the task `summary` from the response to the user. On user "go": `mcp__lazy-dev__approve({ run_id })`. On user "cancel": `mcp__lazy-dev__cancel({ run_id })`, stop. |
 | `await_user` | Gate already fired. Wait for user "go" / "cancel", then call `mcp__lazy-dev__approve` or `mcp__lazy-dev__cancel` accordingly. |
-| `dispatch` | Call `mcp__lazy-dev__dispatch({ run_id, task_id: id })` for ALL ids in `response.ids` in parallel (send all dispatch calls in one message). Then launch ALL returned agents in parallel — use `run_in_background: true` on each Agent call and send all Agent calls in a single message. After launching, loop to `plan_next` (don't wait for agents to finish — the `wait` action handles that). NOTE: use `response.ids` for task IDs, NOT `response.tasks` (that's the status snapshot). |
+| `dispatch` | Call `mcp__lazy-dev__dispatch({ run_id, task_id: id })` for ALL ids in `response.ids` in parallel. Then launch ALL returned agents in parallel using the exact pattern below. After launching, loop to `plan_next`. NOTE: use `response.ids` for task IDs, NOT `response.tasks` (that's the status snapshot). |
 | `wait` | Specialists are running. Do NOT tight-loop — wait for a background agent completion notification. When notified, loop to `plan_next`. If no notification arrives within a reasonable time, loop once to check. |
 | `blocked` | Print failure `detail` + `failed` list. Surface and stop. |
-| `dispatch_reviewer` | Call `mcp__lazy-dev__review_build({ run_id, effort })` — same effort tier you chose for the planner unless the plan revealed more/less complexity than the brief hinted. Agent-dispatch using the returned `agent_namespaced` as `subagent_type` and `dispatch_prompt` as the prompt. Do NOT hand-write the reviewer prompt. Loop. |
+| `dispatch_reviewer` | Call `mcp__lazy-dev__review_build({ run_id, effort })` — same effort tier you chose for the planner unless the plan revealed more/less complexity than the brief hinted. Then dispatch using the exact pattern below. Do NOT hand-write the reviewer prompt. Loop. |
 | `auto_retry` | Call `mcp__lazy-dev__retry_tasks({ run_id, task_ids: <response.tasks> })`. Do not ask the user. Loop. |
 | `surface_review` | The reviewer has exhausted automatic retries. Print `detail` and the `tasks` list to the user. Ask: retry those tasks, or cancel the run? If user says retry: call `mcp__lazy-dev__retry_tasks({ run_id, task_ids: <response.tasks> })`, then loop. If user says cancel: `mcp__lazy-dev__cancel({ run_id })`, stop. |
 | `run_merge` | Loop — `plan_next` performs the merges on its next invocation. |
 | `run_integration_test` | Loop — `plan_next` runs the integration test on its next invocation. |
-| `dispatch_merger` | Call `mcp__lazy-dev__merger_envelope({ run_id, merge_id: <response.merge_id> })`. Agent-dispatch using the returned `agent_namespaced` as `subagent_type` and `dispatch_prompt` as the prompt. Loop. |
+| `dispatch_merger` | Call `mcp__lazy-dev__merger_envelope({ run_id, merge_id: <response.merge_id> })`. Then dispatch using the exact pattern below. Loop. |
 | `summarise` | Print the response summary. Done. |
 | `surface` | Print `detail`. Stop. Do not re-dispatch or try to recover. |
 | _anything else_ | Call `mcp__lazy-dev__doctor({ run_id })`, print its `report`, and surface to the user. Do not guess the action semantics. |
+
+### Agent dispatch pattern — ALWAYS use this exact structure
+
+Every time you dispatch an agent (planner, specialist, reviewer, merger), use this pattern. The `model` field from the MCP response controls which model runs the agent — **you MUST pass it**.
+
+```
+Agent({
+  description: "<task title or short description>",
+  subagent_type: response.agent_namespaced,
+  model: response.model,
+  prompt: response.dispatch_prompt,
+  run_in_background: true
+})
+```
+
+Never omit `model` — it determines whether the agent runs on Opus, Sonnet, or Haiku. Omitting it wastes money by running cheap tasks on expensive models.
 
 ## Error taxonomy
 

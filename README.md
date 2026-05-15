@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/Ricky-Stevens/lazy-dev/graph/badge.svg)](https://codecov.io/gh/Ricky-Stevens/lazy-dev)
 [![Semgrep](https://img.shields.io/badge/security-semgrep-blue)](https://github.com/Ricky-Stevens/lazy-dev/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![version](https://img.shields.io/badge/version-0.12.0-blue)](https://github.com/Ricky-Stevens/lazy-dev/releases)
+[![version](https://img.shields.io/badge/version-0.13.0-blue)](https://github.com/Ricky-Stevens/lazy-dev/releases)
 [![Bun](https://img.shields.io/badge/runtime-Bun%201.3%2B-f9f1e1)](https://bun.sh)
 
 A Claude Code plugin for big tasks. You keep working in your main thread -- when something needs a plan, decomposition, parallel specialists, and a review, hand it to lazy-dev.

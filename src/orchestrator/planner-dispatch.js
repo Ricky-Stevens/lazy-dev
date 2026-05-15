@@ -38,11 +38,12 @@ export function plannerDispatch({ runId, projectDir, effort = "high" }) {
 
 	return {
 		agent_namespaced: agentNamespaced,
+		model: "opus",
 		effort,
 		brief_path: briefPath,
 		run_dir: runDir,
 		dispatch_prompt:
-			`Brief: ${briefPath}\nRun dir: ${runDir}\n\n` +
+			`Brief: ${briefPath}\nRun dir: ${runDir}\nEffort: ${effort || "high"}\n\n` +
 			"The user has explicitly requested you create these two files:\n" +
 			`  1. ${runDir}/master-spec.md\n` +
 			`  2. ${runDir}/tasks.json\n\n` +

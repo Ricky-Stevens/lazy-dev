@@ -7,8 +7,8 @@ export const plannerDispatchTool = {
 		"Build the planner dispatch prompt. Call when plan_next emits action=dispatch_planner. " +
 		"`effort` picks the planner variant: 'medium' (routine <=3 files), 'high' (default, standard " +
 		"feature work), 'xhigh' (cross-subsystem), 'max' (architectural / migrations — expensive). " +
-		"Returns: { agent_namespaced, effort, brief_path, run_dir, dispatch_prompt }. Agent-dispatch " +
-		"using agent_namespaced as subagent_type and dispatch_prompt as the prompt.",
+		"Returns: { agent_namespaced, model, effort, brief_path, run_dir, dispatch_prompt }. Agent-dispatch " +
+		"using agent_namespaced as subagent_type, model as the model parameter, and dispatch_prompt as the prompt.",
 	inputSchema: {
 		type: "object",
 		additionalProperties: false,

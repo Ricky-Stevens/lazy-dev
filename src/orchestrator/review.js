@@ -81,6 +81,7 @@ export function reviewBuild({ runId, projectDir, effort = "high" }) {
 
 	return {
 		agent_namespaced: agentNamespaced,
+		model: "opus",
 		effort,
 		envelope_path: envPath,
 		dispatch_prompt:
