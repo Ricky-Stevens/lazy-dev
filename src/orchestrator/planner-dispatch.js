@@ -43,8 +43,11 @@ export function plannerDispatch({ runId, projectDir, effort = "high" }) {
 		run_dir: runDir,
 		dispatch_prompt:
 			`Brief: ${briefPath}\nRun dir: ${runDir}\n\n` +
-			"Read the brief, write master-spec.md and tasks.json under the run dir, " +
-			"then end with the completion sentinel.",
+			"The user has explicitly requested you create these two files:\n" +
+			`  1. ${runDir}/master-spec.md\n` +
+			`  2. ${runDir}/tasks.json\n\n` +
+			"These files MUST exist on disk before you emit the sentinel. " +
+			"Use absolute paths. Prefer Bash (cat > path << 'HEREDOC') for .md files.",
 	};
 }
 

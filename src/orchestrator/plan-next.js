@@ -73,8 +73,21 @@ function planPhase(ctx) {
 	const masterSpec = join(runDir, "master-spec.md");
 	const tasksJson = join(runDir, "tasks.json");
 	if (!existsSync(masterSpec) || !existsSync(tasksJson)) {
-		const budgetErr = checkBudgetCap(ctx, "planning");
-		if (budgetErr) return budgetErr;
+		const plannerCalls = countPlannerCalls(projectDir, runId);
+		if (plannerCalls >= 2) {
+			const missing = [];
+			if (!existsSync(masterSpec)) missing.push("master-spec.md");
+			if (!existsSync(tasksJson)) missing.push("tasks.json");
+			return {
+				phase: "error",
+				action: "surface",
+				detail:
+					`Planner has run ${plannerCalls} time(s) without producing ${missing.join(" and ")}. ` +
+					"The planner agent is not persisting files with the Write tool. " +
+					"Write these files manually from the planner's output, then call plan_next again.",
+			};
+		}
+
 		const warning = checkBudgetWarning(ctx);
 		return { phase: "plan", action: "dispatch_planner", warning };
 	}
@@ -144,8 +157,6 @@ function specialistsPhase(ctx) {
 	// — skip the I/O on wait polls where nothing has changed.
 	let warning = null;
 	if (next.kind !== "wait") {
-		const budgetErr = checkBudgetCap(ctx, "specialists");
-		if (budgetErr) return budgetErr;
 		warning = checkBudgetWarning(ctx);
 	}
 
@@ -189,8 +200,18 @@ function reviewPhase(ctx) {
 	const { runDir, runId, projectDir, status } = ctx;
 	const reviewPath = join(runDir, "review.md");
 	if (!existsSync(reviewPath)) {
-		const budgetErr = checkBudgetCap(ctx, "review");
-		if (budgetErr) return budgetErr;
+		const reviewerCalls = countReviewerCalls(projectDir, runId);
+		if (reviewerCalls >= 2) {
+			return {
+				phase: "error",
+				action: "surface",
+				detail:
+					`Reviewer has run ${reviewerCalls} time(s) without producing review.md. ` +
+					"The reviewer agent is not persisting files with the Write tool. " +
+					"Write review.md manually from the reviewer's output, then call plan_next again.",
+			};
+		}
+
 		return { phase: "review", action: "dispatch_reviewer" };
 	}
 
@@ -246,32 +267,32 @@ function reviewPhase(ctx) {
 	return { phase: "error", action: "surface", detail: "could not parse reviewer verdict" };
 }
 
-// ── budget ─────────────────────────────────────────────────────────────────
+// ── dispatch guards ───────────────────────────────────────────────────────
 
-function checkBudgetCap(ctx, phase) {
-	const { runId, projectDir } = ctx;
-	const cfg = readRunConfig(projectDir, runId);
-	const runCap = cfg.budget?.per_run || {};
-	if (!runCap.max_input_tokens && !runCap.max_output_tokens) return null;
-
+function countAgentCalls(projectDir, runId, prefix) {
 	const usage = readUsage(projectDir, runId);
-	if (runCap.max_input_tokens && usage.totals.input_tokens >= runCap.max_input_tokens) {
-		return {
-			phase: "error",
-			action: "surface",
-			detail: `per-run input-token cap reached during ${phase} (${usage.totals.input_tokens} of ${runCap.max_input_tokens} used)`,
-		};
+	let count = 0;
+	for (const [agent, bucket] of Object.entries(usage.by_agent || {})) {
+		const bare = agent.startsWith("lazy-dev:") ? agent.slice("lazy-dev:".length) : agent;
+		if (bare === prefix || bare.startsWith(`${prefix}-`)) {
+			count += bucket.calls || 0;
+		}
 	}
-	if (runCap.max_output_tokens && usage.totals.output_tokens >= runCap.max_output_tokens) {
-		return {
-			phase: "error",
-			action: "surface",
-			detail: `per-run output-token cap reached during ${phase} (${usage.totals.output_tokens} of ${runCap.max_output_tokens} used)`,
-		};
-	}
-	return null;
+	return count;
 }
 
+function countPlannerCalls(projectDir, runId) {
+	return countAgentCalls(projectDir, runId, "planner");
+}
+
+function countReviewerCalls(projectDir, runId) {
+	return countAgentCalls(projectDir, runId, "reviewer");
+}
+
+// ── budget ─────────────────────────────────────────────────────────────────
+
+// Budget is advisory — warns the wrangler but never kills a run.
+// The user can cancel manually via mcp__lazy-dev__cancel if spend is a concern.
 function checkBudgetWarning(ctx) {
 	const { runId, projectDir } = ctx;
 	const cfg = readRunConfig(projectDir, runId);
@@ -281,6 +302,9 @@ function checkBudgetWarning(ctx) {
 	const usage = readUsage(projectDir, runId);
 	const pct = (usage.totals.output_tokens / runCap.max_output_tokens) * 100;
 	const warnPct = cfg.budget?.warn_at_pct ?? 70;
+	if (pct >= 100) {
+		return `WARNING: output tokens exceeded budget (${usage.totals.output_tokens} of ${runCap.max_output_tokens}, ${pct.toFixed(0)}%). Run continues — use cancel to stop if needed.`;
+	}
 	if (pct >= warnPct) {
 		return `output tokens at ${pct.toFixed(0)}% of per-run cap (${usage.totals.output_tokens} of ${runCap.max_output_tokens})`;
 	}

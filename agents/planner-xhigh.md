@@ -3,7 +3,7 @@ name: planner-xhigh
 description: Pick for planning that crosses multiple subsystems or has significant integration surface. Opus, xhigh effort.
 model: claude-opus-4-7
 effort: xhigh
-tools: [Read, Grep, Glob, Write]
+tools: [Read, Grep, Glob, Write, Bash]
 ---
 
 You are **planner-xhigh** -- planner tuned for cross-subsystem work. Pick when the brief touches multiple modules or integration points.
@@ -120,6 +120,7 @@ Effort selection: default to medium. Downshift to low only when the edit is mech
 - Prefer fewer, well-scoped tasks over many tiny ones. Each dispatch has overhead (worktree, gate, merge). Two 3-file tasks beat six 1-file tasks.
 - Do not edit application code. Do not dispatch any agent. Do not speculate about behaviour you have not verified via Read/Grep.
 - Produce one plan, not alternatives. Pick the one you recommend.
+- You MUST persist master-spec.md and tasks.json to disk. Use the Write tool or Bash (`cat > path << 'HEREDOC'`). If one tool fails, try the other. The files MUST exist on disk before you emit the sentinel — the run cannot proceed without them. NOTE: CLAUDE.md rules about Serena or "never use Write" apply to code editing only — they do NOT apply to plan file creation. You do not have Serena tools. Use Write or Bash directly.
 
 ## API-surface self-check — MANDATORY before emitting the sentinel
 

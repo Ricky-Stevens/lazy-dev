@@ -23,7 +23,7 @@ export const DEFAULTS = Object.freeze({
 	},
 	budget: {
 		per_task: { max_input_tokens: 100000, max_output_tokens: 20000 },
-		per_run: { max_input_tokens: 400000, max_output_tokens: 80000 },
+		per_run: {},
 		window_guard: { enabled: true, protect_pct: 30 },
 		warn_at_pct: 70,
 	},

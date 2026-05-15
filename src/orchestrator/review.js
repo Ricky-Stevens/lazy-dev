@@ -85,7 +85,10 @@ export function reviewBuild({ runId, projectDir, effort = "high" }) {
 		envelope_path: envPath,
 		dispatch_prompt:
 			`Envelope: ${envPath}\n\n` +
-			`Read the envelope, the master-spec, and each task's diff_patch. Follow the reviewer rubric. Write review.md at .lazy-dev/runs/${runId}/review.md and end with the sentinel.${retryLine}`,
+			"The user has explicitly requested you create this file:\n" +
+			`  ${join(projectDir, ".lazy-dev", "runs", runId, "review.md")}\n\n` +
+			`Read the envelope, the master-spec, and each task's diff_patch. Follow the reviewer rubric. ` +
+			`Prefer Bash (cat > path << 'HEREDOC') for writing review.md. End with the sentinel.${retryLine}`,
 		retry: isRetry,
 	};
 }

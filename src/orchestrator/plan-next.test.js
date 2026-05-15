@@ -319,42 +319,8 @@ describe("planNext — merge phase delegation", () => {
 	});
 });
 
-describe("planNext — budget caps", () => {
-	test("triggers input token cap error", () => {
-		writeFileSync(
-			join(runDir, "status.json"),
-			JSON.stringify({ run_id: runId, phase: "specialists" }),
-		);
-		writePlan([simpleTask("T-0001")]);
-		const settingsDir = join(projectDir, ".lazy-dev");
-		writeFileSync(
-			join(settingsDir, "settings.json"),
-			JSON.stringify({
-				budget: { per_run: { max_input_tokens: 10 } },
-			}),
-		);
-		writeFileSync(
-			join(runDir, "usage.json"),
-			JSON.stringify({
-				totals: {
-					input_tokens: 100,
-					output_tokens: 0,
-					cache_read_tokens: 0,
-					cache_creation_tokens: 0,
-				},
-				by_agent: {},
-				by_model: {},
-				by_effort: {},
-				by_iteration: [],
-			}),
-		);
-
-		const result = planNext({ runId, projectDir });
-		expect(result.phase).toBe("error");
-		expect(result.detail).toContain("input-token cap");
-	});
-
-	test("triggers output token cap error", () => {
+describe("planNext — budget warnings", () => {
+	test("warns when output tokens exceed budget but does not stop the run", () => {
 		writeFileSync(
 			join(runDir, "status.json"),
 			JSON.stringify({ run_id: runId, phase: "specialists" }),
@@ -384,7 +350,7 @@ describe("planNext — budget caps", () => {
 		);
 
 		const result = planNext({ runId, projectDir });
-		expect(result.phase).toBe("error");
-		expect(result.detail).toContain("output-token cap");
+		expect(result.phase).toBe("specialists");
+		expect(result.warning).toContain("exceeded budget");
 	});
 });
