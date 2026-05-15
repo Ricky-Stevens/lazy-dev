@@ -50,6 +50,14 @@ export function pruneCore({ runId, projectDir }) {
 		} catch {}
 	}
 
+	// Clean up stale .git/worktrees/ entries left by manually-deleted worktrees.
+	try {
+		execFileSync("git", ["-C", projectDir, "worktree", "prune"], {
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+	} catch {}
+
 	const branchesRemoved = [];
 	const branchesFailed = [];
 	try {

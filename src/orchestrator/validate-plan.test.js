@@ -6,6 +6,8 @@ describe("validatePlan", () => {
 		id: "T-0001",
 		title: "test",
 		agent: "code-small",
+		goal: "Test goal",
+		details: "Test implementation details",
 		scope: { allowed_paths: ["src/a.js"] },
 		completion_criteria: [{ id: "x", kind: "shell", cmd: "true" }],
 		...over,

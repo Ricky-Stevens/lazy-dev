@@ -60,8 +60,17 @@ create() {
 
   mkdir -p "${dir}/.lazy-dev/worktrees/${run_id}"
 
-  # If the workspace already exists for this (run, task), reuse it.
+  # If the workspace already exists for this (run, task), reuse it but
+  # pull in any new commits from the base branch (dependency merges may
+  # have landed since the first dispatch). If the merge conflicts, reset
+  # to the base ref so the specialist starts clean.
   if [ -d "$wt_abs" ]; then
+    if is_git_repo; then
+      if ! git -C "$wt_abs" merge --no-edit "$base_ref" >&2 2>/dev/null; then
+        git -C "$wt_abs" merge --abort >&2 2>/dev/null || true
+        git -C "$wt_abs" reset --hard "$base_ref" >&2 2>/dev/null || true
+      fi
+    fi
     echo "$wt_abs"
     return 0
   fi
@@ -204,11 +213,22 @@ merge() {
   local branch="lazy-dev/${run_id}/${sanitized}"
 
   if is_git_repo; then
+    # Stash any staged/unstaged changes before merging — prevents
+    # false "conflict" errors when the main worktree has pending edits.
+    local stashed=false
+    if ! git -C "$dir" diff --quiet || ! git -C "$dir" diff --cached --quiet; then
+      git -C "$dir" stash push -q -m "lazy-dev: pre-merge stash for $task_id" >&2
+      stashed=true
+    fi
     if git -C "$dir" merge --no-ff --no-edit "$branch" >&2; then
       echo "merged: $branch" >&2
+      $stashed && git -C "$dir" stash pop -q >&2 2>/dev/null || true
       return 0
     fi
     git -C "$dir" diff --name-only --diff-filter=U
+    # Abort the failed merge and restore stash
+    git -C "$dir" merge --abort >&2 2>/dev/null || true
+    $stashed && git -C "$dir" stash pop -q >&2 2>/dev/null || true
     return 3
   else
     # Non-git: rsync the copy back. Detect conflicts by comparing checksums

@@ -208,6 +208,18 @@ async function main() {
 		);
 	}
 
+	// 1b. TASK_ID — required for task-level agents so the gate resolves the envelope.
+	if (!sentinel.body?.task_id) {
+		if (iteration >= budget.max_iter) {
+			state.markFailed("missing_task_id", { iteration });
+			return;
+		}
+		return emitRetry(
+			"Your sentinel is missing `task_id`. Include it in the JSON body: " +
+				`{ "task_id": "${taskId}", "summary": "..." }. This is iteration ${iteration} of ${budget.max_iter}.`,
+		);
+	}
+
 	// 2. AUTO-COMMIT FALLBACK
 	autoCommit(projectDir, runId, taskId, worktree, log);
 
@@ -353,12 +365,20 @@ function verifyPerRunOutput(projectDir, runId, bareAgentName, log) {
 function clearRetryPendingFailure(state) {
 	if (!existsSync(state.failedMarker)) return;
 	try {
-		const data = JSON.parse(readFileSync(state.failedMarker, "utf8"));
+		const raw = readFileSync(state.failedMarker, "utf8");
+		let data;
+		try {
+			data = JSON.parse(raw);
+		} catch {
+			// Corrupt marker — remove it so the task isn't permanently stuck.
+			rmSync(state.failedMarker, { force: true });
+			return;
+		}
 		if (data.reason === "verifier_retry_pending") {
 			rmSync(state.failedMarker);
 		}
 	} catch {
-		// Corrupt marker — leave it for manual inspection.
+		// File disappeared between check and read — harmless.
 	}
 }
 

@@ -56,29 +56,30 @@ Path to `.lazy-dev/runs/<run-id>/brief.md`.
    - Declare `completion_criteria` using this exact schema:
      ```json
      "completion_criteria": [
-       { "id": "tests_pass", "kind": "shell", "cmd": "bun test hi.test.js", "must_exit": 0 },
-       { "id": "function_exists", "kind": "grep", "pattern": "function greet", "in_file": "hi.js", "must_match": true },
-       { "id": "test_file_exists", "kind": "file_exists", "path": "hi.test.js" },
+       { "id": "tests_pass", "kind": "shell", "cmd": "go test ./...", "must_exit": 0 },
+       { "id": "function_exists", "kind": "grep", "pattern": "func Greet", "in_file": "hi.go", "must_match": true },
+       { "id": "handlers_exist", "kind": "grep", "pattern": "func New.*Handler", "in_glob": "internal/handlers/*.go", "must_match": true },
+       { "id": "test_file_exists", "kind": "file_exists", "path": "hi_test.go" },
        { "id": "scope_check", "kind": "diff_scope" }
      ]
      ```
      `diff_scope` is the most important verifier -- it ensures specialists stay within their `scope.allowed_paths`. No additional fields needed; it checks against the envelope's `scope.allowed_paths` automatically.
+     All verifier paths and commands run relative to the task's worktree:
+     - `shell` `cmd`: bare commands only (`go build ./...`, `bun test`). NEVER `cd /absolute/path && ...`.
+     - `grep` `in_file`/`in_glob`: relative paths only (`internal/foo.go`, `cmd/*.go`). NEVER absolute.
+     - `file_exists` `path`: relative to worktree root. NEVER absolute.
+     - Criterion `id` values must be unique within a task.
      Every item must be mechanically checkable. A task without mechanical criteria is over-scoped; split it.
    - Declare `"depends_on": ["T-xxxx"]` when two tasks' `allowed_paths` could match any of the same files (including via glob expansion). The orchestrator rejects plans missing this.
    - Set `"budget": { "max_iter": 3, "max_output_tokens": N }`. Guide: ~8000 for a 1-file edit, ~16000 for multi-file, ~24000 for complex multi-file with tests. Overestimate slightly — the budget is a safety cap, not a target.
+   - Set `"notes"` when the specialist needs to add new dependencies. Specialists are told "No new dependencies unless the envelope's `notes` allows it." Use `"notes": "may add dependencies: <list>"` when a task requires new imports not in go.mod/package.json.
 
 6. End with the completion sentinel:
 
    ```
    ---COMPLETED---
    {
-     "summary": "<one paragraph>",
-     "diff_paths": [".lazy-dev/runs/<run-id>/master-spec.md",
-                    ".lazy-dev/runs/<run-id>/tasks.json"],
-     "agent_specific": {
-       "task_ids": ["T-0001", "T-0002"],
-       "estimated_total_tokens": { "input": 50000, "output": 12000 }
-     }
+     "summary": "<one paragraph describing the plan>"
    }
    ---END---
    ```

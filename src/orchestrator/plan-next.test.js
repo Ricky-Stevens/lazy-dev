@@ -30,6 +30,8 @@ const simpleTask = (id, agent = "code-small") => ({
 	id,
 	agent,
 	title: `task ${id}`,
+	goal: `Implement ${id}`,
+	details: `Create src/${id}.js with the required functionality.`,
 	scope: { allowed_paths: [`src/${id}.js`] },
 	completion_criteria: [{ id: "exists", kind: "file_exists", path: `src/${id}.js` }],
 	budget: { max_iter: 3 },

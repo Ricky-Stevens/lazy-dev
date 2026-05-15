@@ -14,6 +14,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { withGitLock } from "../mcp/_git-lock.js";
 import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
 import { withRunLock } from "../mcp/_lock.js";
 import { requireSafeId } from "../mcp/_validation.js";
@@ -48,41 +49,44 @@ export function dispatch({ runId, taskId, projectDir }) {
 
 	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
 
-	// Git operations run outside the lock — these are per-task and don't
-	// conflict with other independent tasks being dispatched concurrently.
-	for (const depId of deps) {
-		try {
-			execFileSync(
-				"bash",
-				[join(pluginRoot, "src/orchestrator/worktree.sh"), "merge", runId, depId],
-				{
-					encoding: "utf8",
-					cwd: projectDir,
-					stdio: ["ignore", "pipe", "pipe"],
-					timeout: 10 * 60_000,
-					maxBuffer: 10 * 1024 * 1024,
-				},
-			);
-		} catch (err) {
-			if (err.status === 3) {
-				throw new Error(
-					`cannot dispatch ${taskId}: merging dependency ${depId} produced conflicts — resolve first`,
+	// Git operations (dep merges + worktree creation) modify the main worktree.
+	// Serialized via a project-level git lock to prevent concurrent dispatches
+	// from colliding on git index/stash state.
+	const worktreePath = withGitLock(projectDir, () => {
+		for (const depId of deps) {
+			try {
+				execFileSync(
+					"bash",
+					[join(pluginRoot, "src/orchestrator/worktree.sh"), "merge", runId, depId],
+					{
+						encoding: "utf8",
+						cwd: projectDir,
+						stdio: ["ignore", "pipe", "pipe"],
+						timeout: 10 * 60_000,
+						maxBuffer: 10 * 1024 * 1024,
+					},
 				);
+			} catch (err) {
+				if (err.status === 3) {
+					throw new Error(
+						`cannot dispatch ${taskId}: merging dependency ${depId} produced conflicts — resolve first`,
+					);
+				}
+				throw new Error(`failed to merge dependency ${depId}: ${err.message}`);
 			}
-			throw new Error(`failed to merge dependency ${depId}: ${err.message}`);
 		}
-	}
 
-	const worktreePath = execFileSync(
-		"bash",
-		[join(pluginRoot, "src/orchestrator/worktree.sh"), "create", runId, taskId],
-		{
-			encoding: "utf8",
-			cwd: projectDir,
-			timeout: 2 * 60_000,
-			maxBuffer: 1 * 1024 * 1024,
-		},
-	).trim();
+		return execFileSync(
+			"bash",
+			[join(pluginRoot, "src/orchestrator/worktree.sh"), "create", runId, taskId],
+			{
+				encoding: "utf8",
+				cwd: projectDir,
+				timeout: 2 * 60_000,
+				maxBuffer: 1 * 1024 * 1024,
+			},
+		).trim();
+	});
 
 	// Write envelope under lock (fast — no subprocesses).
 	return withRunLock(runDir, () => {
@@ -90,11 +94,14 @@ export function dispatch({ runId, taskId, projectDir }) {
 		mkdirSync(taskDir, { recursive: true });
 		const envelopePath = join(taskDir, "envelope.json");
 		const dispatchedAt = new Date().toISOString();
+		const sanitized = taskId.replace(/[^A-Za-z0-9_-]/g, "_");
+		const worktreeBranch = `lazy-dev/${runId}/${sanitized}`;
 		const envelopeBody = {
 			...task,
 			run_id: runId,
 			task_id: taskId,
 			worktree_path: worktreePath,
+			worktree_branch: worktreeBranch,
 			dispatched_at: dispatchedAt,
 		};
 		if (!existsSync(envelopePath)) {

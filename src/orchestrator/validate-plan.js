@@ -66,6 +66,17 @@ export function validatePlan(plan, options = {}) {
 			errors.push(`${tag}: agent ${t.agent} is orchestrator-managed; do not schedule it`);
 		else if (!VALID_AGENTS.has(t.agent)) errors.push(`${tag}: unknown agent ${t.agent}`);
 
+		if (typeof t.goal !== "string" || !t.goal)
+			errors.push(`${tag}: missing goal — specialist needs this to understand the task`);
+		if (typeof t.details !== "string" || !t.details)
+			errors.push(`${tag}: missing details — specialist needs implementation guidance`);
+		if (typeof t.title !== "string" || !t.title)
+			errors.push(`${tag}: missing title — shown in reviewer/doctor output`);
+		if (t.budget && typeof t.budget === "object") {
+			if (typeof t.budget.max_iter === "number" && t.budget.max_iter < 1)
+				errors.push(`${tag}: budget.max_iter must be >= 1`);
+		}
+
 		if (!t.scope || !Array.isArray(t.scope.allowed_paths) || t.scope.allowed_paths.length === 0) {
 			errors.push(`${tag}: scope.allowed_paths must be a non-empty array`);
 		} else {
@@ -87,6 +98,7 @@ export function validatePlan(plan, options = {}) {
 		if (!Array.isArray(t.completion_criteria) || t.completion_criteria.length === 0) {
 			errors.push(`${tag}: completion_criteria must be a non-empty array`);
 		} else {
+			const seenCriterionIds = new Set();
 			for (let j = 0; j < t.completion_criteria.length; j++) {
 				const c = t.completion_criteria[j];
 				// Normalize common LLM field-name drift (planners sometimes improvise).
@@ -111,6 +123,18 @@ export function validatePlan(plan, options = {}) {
 						c.in_file = c.file;
 						c.file = undefined;
 					}
+					if (c.kind === "grep" && !c.in_glob && c.path_glob) {
+						c.in_glob = c.path_glob;
+						c.path_glob = undefined;
+					}
+					if (c.kind === "grep" && c.must_match == null && c.match != null) {
+						c.must_match = c.match;
+						c.match = undefined;
+					}
+					if (c.kind === "shell" && c.must_exit == null && c.exit_code != null) {
+						c.must_exit = c.exit_code;
+						c.exit_code = undefined;
+					}
 					if (!c.id && c.kind) {
 						c.id = `${c.kind}_${j}`;
 					}
@@ -121,15 +145,32 @@ export function validatePlan(plan, options = {}) {
 					continue;
 				}
 				if (typeof c.id !== "string" || !c.id) errors.push(`${ctag}: missing id`);
+				else if (seenCriterionIds.has(c.id))
+					errors.push(
+						`${ctag}: duplicate criterion id "${c.id}" — ids must be unique within a task`,
+					);
+				else seenCriterionIds.add(c.id);
 				if (!VALID_KINDS.has(c.kind)) errors.push(`${ctag}: unknown kind ${c.kind}`);
-				if (c.kind === "shell" && typeof c.cmd !== "string")
-					errors.push(`${ctag}: shell needs cmd`);
+				if (c.kind === "shell") {
+					if (typeof c.cmd !== "string") errors.push(`${ctag}: shell needs cmd`);
+					else if (/(?:^|\s)cd\s+/.test(c.cmd))
+						errors.push(
+							`${ctag}: shell cmd contains "cd ..." — verifiers run in the worktree automatically. Use bare commands without cd.`,
+						);
+				}
 				if (c.kind === "grep") {
 					if (typeof c.pattern !== "string") errors.push(`${ctag}: grep needs pattern`);
 					if (!c.in_file && !c.in_glob) errors.push(`${ctag}: grep needs in_file or in_glob`);
+					if (typeof c.in_file === "string" && c.in_file.startsWith("/"))
+						errors.push(`${ctag}: in_file must be relative to worktree, not absolute`);
+					if (typeof c.in_glob === "string" && c.in_glob.startsWith("/"))
+						errors.push(`${ctag}: in_glob must be relative to worktree, not absolute`);
 				}
-				if (c.kind === "file_exists" && typeof c.path !== "string")
-					errors.push(`${ctag}: file_exists needs path`);
+				if (c.kind === "file_exists") {
+					if (typeof c.path !== "string") errors.push(`${ctag}: file_exists needs path`);
+					else if (c.path.startsWith("/"))
+						errors.push(`${ctag}: path must be relative to worktree, not absolute`);
+				}
 			}
 		}
 
@@ -141,9 +182,7 @@ export function validatePlan(plan, options = {}) {
 		}
 	}
 
-	if (errors.length) return { ok: false, errors };
-
-	// ── Cross-task checks ──
+	// ── Cross-task checks (run even if per-task errors exist so all issues are reported at once) ──
 
 	// All depends_on ids must resolve.
 	for (const t of tasks) {

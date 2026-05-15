@@ -104,6 +104,15 @@ function runShell(c, { cwd, projectDir }) {
 			: execFileSync("bash", ["-c", c.cmd], execOpts);
 		stdoutTail = tail(out, 40);
 	} catch (err) {
+		if (err.signal === "SIGTERM" || err.code === "ETIMEDOUT") {
+			return {
+				id: c.id,
+				kind: c.kind,
+				passed: false,
+				details: `TIMED OUT after ${Math.round(execOpts.timeout / 1000)}s — the command did not complete. Check for hanging network calls, blocked I/O, or infinite loops.\n--- stdout tail ---\n${tail(err.stdout?.toString?.() ?? "", 20)}`,
+				failure_signature: cheapHash(`${c.id}|timeout`),
+			};
+		}
 		exitCode = typeof err.status === "number" ? err.status : 1;
 		stderr = tail(err.stderr?.toString?.() ?? "", 40);
 		stdoutTail = tail(err.stdout?.toString?.() ?? "", 40);
