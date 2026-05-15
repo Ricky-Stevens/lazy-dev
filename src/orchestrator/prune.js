@@ -10,10 +10,81 @@
 //   node src/orchestrator/prune.js <run-id>
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmdirSync } from "node:fs";
 import { join } from "node:path";
 import { withRunLock } from "../mcp/_lock.js";
 import { requireSafeId } from "../mcp/_validation.js";
+
+// Core cleanup logic — no lock, no phase guard.
+// Called directly by auto-cleanup (which already holds the run lock) and
+// indirectly by the public prune() wrapper.
+export function pruneCore({ runId, projectDir }) {
+	requireSafeId(runId, "run_id");
+	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
+	const runDir = join(projectDir, ".lazy-dev", "runs", runId);
+
+	const worktreesRemoved = [];
+	const worktreesFailed = [];
+	const worktreesDir = join(projectDir, ".lazy-dev", "worktrees", runId);
+	if (existsSync(worktreesDir)) {
+		for (const entry of readdirSync(worktreesDir)) {
+			const lastDash = entry.lastIndexOf("-");
+			const taskId = lastDash > 0 ? entry.slice(0, lastDash) : entry;
+			try {
+				execFileSync(
+					"bash",
+					[join(pluginRoot, "src/orchestrator/worktree.sh"), "remove", runId, taskId],
+					{ cwd: projectDir, encoding: "utf8", timeout: 30_000 },
+				);
+				worktreesRemoved.push(entry);
+			} catch (err) {
+				worktreesFailed.push({ entry, reason: err.message });
+			}
+		}
+	}
+
+	// Remove the now-empty run-level worktree directory.
+	if (existsSync(worktreesDir) && readdirSync(worktreesDir).length === 0) {
+		try {
+			rmdirSync(worktreesDir);
+		} catch {}
+	}
+
+	const branchesRemoved = [];
+	const branchesFailed = [];
+	try {
+		const out = execFileSync("git", ["-C", projectDir, "branch", "--list", `lazy-dev/${runId}/*`], {
+			encoding: "utf8",
+			timeout: 10_000,
+		});
+		const branches = out
+			.split("\n")
+			.map((b) => b.replace(/^\s*\*?\s*/, "").trim())
+			.filter(Boolean);
+		for (const b of branches) {
+			try {
+				execFileSync("git", ["-C", projectDir, "branch", "-D", b], {
+					encoding: "utf8",
+					timeout: 10_000,
+				});
+				branchesRemoved.push(b);
+			} catch (err) {
+				branchesFailed.push({ branch: b, reason: err.message });
+			}
+		}
+	} catch {
+		// Not a git repo or git unavailable — silently skip branch cleanup.
+	}
+
+	return {
+		run_id: runId,
+		worktrees_removed: worktreesRemoved,
+		worktrees_failed: worktreesFailed,
+		branches_removed: branchesRemoved,
+		branches_failed: branchesFailed,
+		run_dir_preserved: runDir,
+	};
+}
 
 export function prune({ runId, projectDir }) {
 	requireSafeId(runId, "run_id");
@@ -21,75 +92,13 @@ export function prune({ runId, projectDir }) {
 	if (!existsSync(runDir)) throw new Error(`run ${runId} not found at ${runDir}`);
 
 	const runStatus = readRunPhase(runDir);
-	// Refuse to prune an active run — worktrees may still be in use.
 	if (runStatus && runStatus !== "done" && runStatus !== "cancelled") {
 		throw new Error(
 			`refusing to prune: run phase is ${runStatus}. Cancel first (mcp__lazy-dev__cancel) if you want to abort.`,
 		);
 	}
 
-	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
-	return withRunLock(runDir, () => {
-		const worktreesRemoved = [];
-		const worktreesFailed = [];
-		const worktreesDir = join(projectDir, ".lazy-dev", "worktrees", runId);
-		if (existsSync(worktreesDir)) {
-			for (const entry of readdirSync(worktreesDir)) {
-				// Entry name is <task-id>-<6char-hash>; extract task_id as everything before the last hyphen.
-				const lastDash = entry.lastIndexOf("-");
-				const taskId = lastDash > 0 ? entry.slice(0, lastDash) : entry;
-				try {
-					execFileSync(
-						"bash",
-						[join(pluginRoot, "src/orchestrator/worktree.sh"), "remove", runId, taskId],
-						{ cwd: projectDir, encoding: "utf8", timeout: 30_000 },
-					);
-					worktreesRemoved.push(entry);
-				} catch (err) {
-					worktreesFailed.push({ entry, reason: err.message });
-				}
-			}
-		}
-
-		const branchesRemoved = [];
-		const branchesFailed = [];
-		try {
-			const out = execFileSync(
-				"git",
-				["-C", projectDir, "branch", "--list", `lazy-dev/${runId}/*`],
-				{
-					encoding: "utf8",
-					timeout: 10_000,
-				},
-			);
-			const branches = out
-				.split("\n")
-				.map((b) => b.replace(/^\s*\*?\s*/, "").trim())
-				.filter(Boolean);
-			for (const b of branches) {
-				try {
-					execFileSync("git", ["-C", projectDir, "branch", "-D", b], {
-						encoding: "utf8",
-						timeout: 10_000,
-					});
-					branchesRemoved.push(b);
-				} catch (err) {
-					branchesFailed.push({ branch: b, reason: err.message });
-				}
-			}
-		} catch {
-			// Not a git repo or git unavailable — silently skip branch cleanup.
-		}
-
-		return {
-			run_id: runId,
-			worktrees_removed: worktreesRemoved,
-			worktrees_failed: worktreesFailed,
-			branches_removed: branchesRemoved,
-			branches_failed: branchesFailed,
-			run_dir_preserved: runDir,
-		};
-	});
+	return withRunLock(runDir, () => pruneCore({ runId, projectDir }));
 }
 
 function readRunPhase(runDir) {

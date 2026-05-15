@@ -76,13 +76,13 @@ export function doctor({ runId, projectDir } = {}) {
 			const lastFail = state?.history?.length
 				? state.history[state.history.length - 1]?.failing_signature || "—"
 				: "—";
-			const diffSize = existsSync(join(td, "diff.patch"))
-				? statSync(join(td, "diff.patch")).size
-				: 0;
+			const diffNote = existsSync(join(td, "diff.patch"))
+				? `${statSync(join(td, "diff.patch")).size}B`
+				: "n/a";
 			const wall = formatWallClock(state?.dispatched_at, state?.completed_at);
 			const reasonSuffix = failReason ? ` reason=${failReason}` : "";
 			lines.push(
-				`- ${tid}: [${marks.join(", ") || "—"}] iter=${iter} diff=${diffSize}B failing=${lastFail} wall=${wall}${reasonSuffix}`,
+				`- ${tid}: [${marks.join(", ") || "—"}] iter=${iter} diff=${diffNote} failing=${lastFail} wall=${wall}${reasonSuffix}`,
 			);
 		}
 		lines.push("");

@@ -97,9 +97,11 @@ function runShell(c, { cwd, projectDir }) {
 	let stderr = "";
 	let stdoutTail = "";
 	try {
+		// Trust boundary: c.cmd originates from the planner LLM via tasks.json.
+		// bash -c is required for shell syntax (pipes, negation, redirection).
 		const out = override
 			? execFileSync("bash", [override.script, ...override.args], execOpts)
-			: execFileSync(tokens[0], tokens.slice(1), execOpts);
+			: execFileSync("bash", ["-c", c.cmd], execOpts);
 		stdoutTail = tail(out, 40);
 	} catch (err) {
 		exitCode = typeof err.status === "number" ? err.status : 1;

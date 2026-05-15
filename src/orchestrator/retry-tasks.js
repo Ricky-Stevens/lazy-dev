@@ -47,6 +47,7 @@ export function retryTasks({ runId, taskIds, projectDir }) {
 			atomicWrite(envelopePath, JSON.stringify(envelope, null, 2));
 
 			rmSync(join(taskDir, "APPROVED"), { force: true });
+			rmSync(join(taskDir, "FAILED"), { force: true });
 			rmSync(join(taskDir, "state.json"), { force: true });
 			rmSync(join(taskDir, "state.json.lock"), { force: true });
 

@@ -13,7 +13,7 @@
 //   - never exits non-zero
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
 	buildRetryPrompt,
@@ -160,6 +160,12 @@ async function main() {
 	const policy = { ...DEFAULTS, ...(envelope?.no_change_policy || {}) };
 
 	const state = new StateStore({ projectDir, runId, taskId, kind });
+
+	// If a previous iteration wrote a "verifier_retry_pending" FAILED marker
+	// (the gate emitted a retry prompt), clear it — the agent DID resume
+	// since we're processing another SubagentStop event.
+	clearRetryPendingFailure(state);
+
 	const prev = state.load();
 	const iteration = (prev.iteration || 0) + 1;
 	updateUsageIteration(projectDir, runId, agentId, iteration);
@@ -284,7 +290,12 @@ async function main() {
 		return;
 	}
 
-	// 7. RETRY
+	// 7. RETRY — write a provisional FAILED marker so the state machine can
+	// detect orphaned tasks if the retry prompt is never delivered.
+	state.markFailed("verifier_retry_pending", {
+		iteration,
+		failing: failing.map((f) => f.id),
+	});
 	return emitRetry(buildRetryPrompt(verifierResults, iteration, budget.max_iter));
 }
 
@@ -296,6 +307,18 @@ function locateEnvelope(projectDir, runId, taskId) {
 	const mergePath = join(projectDir, ".lazy-dev", "runs", runId, "merges", taskId, "envelope.json");
 	if (existsSync(mergePath)) return { path: mergePath, kind: "merge" };
 	return null;
+}
+
+function clearRetryPendingFailure(state) {
+	if (!existsSync(state.failedMarker)) return;
+	try {
+		const data = JSON.parse(readFileSync(state.failedMarker, "utf8"));
+		if (data.reason === "verifier_retry_pending") {
+			rmSync(state.failedMarker);
+		}
+	} catch {
+		// Corrupt marker — leave it for manual inspection.
+	}
 }
 
 function autoCommit(projectDir, runId, taskId, worktree, log) {

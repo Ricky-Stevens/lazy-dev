@@ -22,6 +22,7 @@ import { readUsage } from "../ralph/usage.js";
 import { parsePerTaskVerdicts, parseReviewVerdict } from "../shared/parse-verdicts.js";
 import { planIsSimple } from "./plan-gate.js";
 import { integrationTestPhase, mergePhase } from "./plan-next-merge.js";
+import { pruneCore } from "./prune.js";
 import { scheduleNext } from "./schedule.js";
 import { readRunConfig } from "./settings.js";
 import { validatePlan } from "./validate-plan.js";
@@ -280,6 +281,14 @@ function advancePhase(ctx, newPhase) {
 	current.phase = newPhase;
 	ctx.status = current;
 	atomicWrite(statusPath, JSON.stringify(current, null, 2));
+
+	if (newPhase === "done") {
+		try {
+			pruneCore({ runId: ctx.runId, projectDir: ctx.projectDir });
+		} catch {
+			// Best-effort — failed cleanup doesn't block the run from completing.
+		}
+	}
 }
 
 function bumpReviewPass(ctx) {

@@ -184,8 +184,10 @@ describe("gate.js subprocess", () => {
 				last_assistant_message: sentinel,
 			});
 			expect(r1.status).toBe(0);
-			// Should not have written a FAILED marker yet.
-			expect(existsSync(join(taskDir, "FAILED"))).toBe(false);
+			// Provisional FAILED marker signals the retry may not be delivered.
+			expect(existsSync(join(taskDir, "FAILED"))).toBe(true);
+			const provisional = JSON.parse(readFileSync(join(taskDir, "FAILED"), "utf8"));
+			expect(provisional.reason).toBe("verifier_retry_pending");
 
 			// Iteration 2 — identical diffHash triggers oscillation_same_diff.
 			const r2 = runGate({
