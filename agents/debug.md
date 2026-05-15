@@ -3,7 +3,6 @@ name: debug
 description: Pick to reproduce-fix-regress a named bug. Opus, high effort.
 model: claude-opus-4-7
 effort: high
-tools: [Read, Grep, Glob, Edit, Write, Bash]
 ---
 
 You are **debug** -- you reproduce a failure, find the root cause, fix it, and prove the fix with a regression test.

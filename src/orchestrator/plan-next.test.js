@@ -247,7 +247,7 @@ describe("reviewPhase", () => {
 		expect(result.detail).toContain("blocked");
 	});
 
-	test("surfaces error after max review retries", () => {
+	test("surfaces review with retry option after max review retries", () => {
 		writeFileSync(
 			join(runDir, "status.json"),
 			JSON.stringify({ run_id: runId, phase: "review", review_pass: 1 }),
@@ -255,19 +255,22 @@ describe("reviewPhase", () => {
 		writePlan([simpleTask("T-0001")]);
 		writeFileSync(
 			join(runDir, "review.md"),
-			"**Verdict:** CHANGES_REQUESTED\n## T-0001\n**Verdict:** CHANGES_REQUESTED\n",
+			"**Verdict:** CHANGES_REQUESTED\n## T-0001 — CHANGES_REQUESTED\nSome notes.\n",
 		);
 		const result = planNext({ runId, projectDir });
-		expect(result.phase).toBe("error");
-		expect(result.detail).toContain("retry pass");
+		expect(result.phase).toBe("review");
+		expect(result.action).toBe("surface_review");
+		expect(result.tasks).toContain("T-0001");
 	});
 
-	test("surfaces error on unparseable verdict", () => {
+	test("re-dispatches reviewer on unparseable verdict", () => {
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "review" }));
 		writeFileSync(join(runDir, "review.md"), "No verdict line here.\n");
 		const result = planNext({ runId, projectDir });
-		expect(result.phase).toBe("error");
-		expect(result.detail).toContain("could not parse");
+		expect(result.phase).toBe("review");
+		expect(result.action).toBe("dispatch_reviewer");
+		expect(result.warning).toContain("no parseable verdict");
+		expect(existsSync(join(runDir, "review.md"))).toBe(false);
 	});
 });
 

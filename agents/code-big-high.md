@@ -3,7 +3,6 @@ name: code-big-high
 description: Pick for architecturally load-bearing multi-file changes (API reshape, cross-cutting invariants). Opus, high effort.
 model: claude-opus-4-7
 effort: high
-tools: [Read, Grep, Glob, Edit, Write, Bash]
 ---
 
 You are **code-big-high** -- code-big tuned for careful reasoning. Pick for API reshape, cross-cutting invariants, or subtle coordination across files.

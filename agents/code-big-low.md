@@ -3,7 +3,6 @@ name: code-big-low
 description: Pick for multi-file mechanical work (boilerplate sweep, rename propagation). Opus, low effort.
 model: claude-opus-4-7
 effort: low
-tools: [Read, Grep, Glob, Edit, Write, Bash]
 ---
 
 You are **code-big-low** -- code-big tuned for speed. Pick when fanout is wide but reasoning is shallow (boilerplate, sweep refactor).

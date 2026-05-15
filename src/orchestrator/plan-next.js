@@ -12,7 +12,7 @@
 // CLI:
 //   node src/orchestrator/plan-next.js <run-id>
 
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
@@ -202,7 +202,7 @@ function reviewPhase(ctx) {
 	const reviewPath = join(runDir, "review.md");
 	if (!existsSync(reviewPath)) {
 		const reviewerCalls = countReviewerCalls(projectDir, runId);
-		if (reviewerCalls >= 2) {
+		if (reviewerCalls >= 3) {
 			return {
 				phase: "error",
 				action: "surface",
@@ -212,8 +212,11 @@ function reviewPhase(ctx) {
 					"Write review.md manually from the reviewer's output, then call plan_next again.",
 			};
 		}
-
-		return { phase: "review", action: "dispatch_reviewer" };
+		const warning =
+			reviewerCalls > 0
+				? `reviewer has been dispatched ${reviewerCalls} time(s) without producing review.md — retrying`
+				: undefined;
+		return { phase: "review", action: "dispatch_reviewer", warning };
 	}
 
 	const reviewSize = statSync(reviewPath).size;
@@ -243,9 +246,9 @@ function reviewPhase(ctx) {
 
 		if (currentPass >= maxRetries) {
 			return {
-				phase: "error",
-				action: "surface",
-				detail: `reviewer still requests changes after ${currentPass} retry pass(es); stopping. See review.md.`,
+				phase: "review",
+				action: "surface_review",
+				detail: `reviewer still requests changes after ${currentPass} retry pass(es). The affected tasks are listed below. You can retry them with retry_tasks or cancel the run.`,
 				tasks: needsRetry,
 				review_path: reviewPath,
 			};
@@ -265,7 +268,13 @@ function reviewPhase(ctx) {
 		return { phase: "error", action: "surface", detail: "reviewer blocked the run; see review.md" };
 	}
 
-	return { phase: "error", action: "surface", detail: "could not parse reviewer verdict" };
+	// Unparseable verdict — delete the broken review.md so re-dispatch produces a fresh one.
+	rmSync(reviewPath, { force: true });
+	return {
+		phase: "review",
+		action: "dispatch_reviewer",
+		warning: "previous review.md had no parseable verdict — re-dispatching reviewer",
+	};
 }
 
 // ── dispatch guards ───────────────────────────────────────────────────────

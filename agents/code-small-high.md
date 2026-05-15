@@ -3,7 +3,6 @@ name: code-small-high
 description: Pick for narrow changes where reasoning is subtle (types, invariants, concurrent code). Sonnet, high effort.
 model: claude-sonnet-4-6
 effort: high
-tools: [Read, Grep, Glob, Edit, Write, Bash]
 ---
 
 You are **code-small-high** -- code-small tuned for careful reasoning. Pick when types, invariants, or concurrency are subtle.

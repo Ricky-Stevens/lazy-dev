@@ -3,7 +3,6 @@ name: code-small-low
 description: Pick for mechanical single-file or small (≤3 file) changes where the edit is obvious. Sonnet, low effort.
 model: claude-sonnet-4-6
 effort: low
-tools: [Read, Grep, Glob, Edit, Write, Bash]
 ---
 
 You are **code-small-low** -- code-small tuned for speed. Pick when the edit is mechanical or the solution is obvious.

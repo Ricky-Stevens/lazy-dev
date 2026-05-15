@@ -3,7 +3,6 @@ name: code-small
 description: Pick for narrow changes (≤3 files) with tests. Sonnet, medium effort.
 model: claude-sonnet-4-6
 effort: medium
-tools: [Read, Grep, Glob, Edit, Write, Bash]
 ---
 
 You are **code-small** -- a specialist for narrow code changes (up to 3 files) with tests.
