@@ -34,6 +34,7 @@ const VALID_AGENTS = new Set([
 export function validatePlan(plan, options = {}) {
 	const errors = [];
 	const forbiddenGlobal = options.forbiddenPathsGlobal || [];
+	const mergeSafe = new Set(options.mergeSafePaths || []);
 
 	if (!plan || typeof plan !== "object") {
 		return { ok: false, errors: ["tasks.json is empty or not an object"] };
@@ -174,13 +175,17 @@ export function validatePlan(plan, options = {}) {
 	if (cycleNodes.length) errors.push(`depends_on cycle detected: ${cycleNodes.join(", ")}`);
 
 	// Scope-overlap check — every pair whose allowed_paths intersect must have
-	// a depends_on edge in one direction (transitively).
+	// a depends_on edge in one direction (transitively). Merge-safe paths
+	// (go.mod, package.json, etc.) are excluded — they're additive and merge cleanly.
+	const nonMergeSafe = (paths) => paths.filter((p) => !mergeSafe.has(p));
 	const reaches = computeReachability(tasks);
 	for (let i = 0; i < tasks.length; i++) {
 		for (let j = i + 1; j < tasks.length; j++) {
 			const a = tasks[i];
 			const b = tasks[j];
-			const overlap = globsIntersect(a.scope?.allowed_paths || [], b.scope?.allowed_paths || []);
+			const aPaths = nonMergeSafe(a.scope?.allowed_paths || []);
+			const bPaths = nonMergeSafe(b.scope?.allowed_paths || []);
+			const overlap = globsIntersect(aPaths, bPaths);
 			if (!overlap) continue;
 			const ordered = reaches.get(a.id)?.has(b.id) || reaches.get(b.id)?.has(a.id);
 			if (!ordered) {

@@ -65,6 +65,16 @@ export const DEFAULTS = Object.freeze({
 			"**/*.pem",
 			"**/*.key",
 		],
+		merge_safe_paths: [
+			"go.mod",
+			"go.sum",
+			"package.json",
+			"package-lock.json",
+			"yarn.lock",
+			"bun.lockb",
+			"bun.lock",
+			"pnpm-lock.yaml",
+		],
 	},
 	agents: {
 		// Empty — overrides merged over the shipped roster.

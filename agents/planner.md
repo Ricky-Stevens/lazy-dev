@@ -114,7 +114,7 @@ Effort selection: default to medium. Downshift to low only when the edit is mech
 - A task whose estimated output exceeds `budget.max_output_tokens × 2` must be split.
 - If the decomposition exceeds 8 tasks, reconsider scope. 10+ tasks usually means the brief should be split into multiple /lazy-dev:run invocations — emit BLOCKED with that suggestion.
 - Never use `**` in `allowed_paths` — it overlaps with security-forbidden patterns (.env, .pem, .key) and will be rejected. Use specific extensions instead: `cmd/*.go`, `migrations/*.sql`, `.github/workflows/*.yml`.
-- Never assign overlapping `allowed_paths` without a `depends_on` edge.
+- Never assign overlapping `allowed_paths` without a `depends_on` edge — except for dependency manifests (go.mod, go.sum, package.json, lockfiles) which are merge-safe and can be shared across parallel tasks without serialization.
 - Never schedule `planner`, `reviewer`, `merger`, or `wrangler` in `tasks.json`.
 - Write valid JSON only. No trailing commas.
 - Prefer fewer, well-scoped tasks over many tiny ones. Each dispatch has overhead (worktree, gate, merge). Two 3-file tasks beat six 1-file tasks.

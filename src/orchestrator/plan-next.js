@@ -95,6 +95,7 @@ function planPhase(ctx) {
 	const cfg = readRunConfig(projectDir, runId);
 	const result = validatePlan(plan, {
 		forbiddenPathsGlobal: cfg.safety?.forbidden_paths_global || [],
+		mergeSafePaths: cfg.safety?.merge_safe_paths || [],
 	});
 	if (!result.ok) {
 		return {

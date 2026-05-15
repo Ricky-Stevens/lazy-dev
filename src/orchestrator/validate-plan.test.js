@@ -95,6 +95,19 @@ describe("validatePlan", () => {
 		expect(r.ok).toBe(true);
 	});
 
+	test("allows parallel tasks sharing merge-safe paths without depends_on", () => {
+		const a = baseTask({
+			id: "T-0001",
+			scope: { allowed_paths: ["internal/domain/*.go", "go.mod", "go.sum"] },
+		});
+		const b = baseTask({
+			id: "T-0002",
+			scope: { allowed_paths: ["internal/clients/*.go", "go.mod", "go.sum"] },
+		});
+		const r = validatePlan({ tasks: [a, b] }, { mergeSafePaths: ["go.mod", "go.sum"] });
+		expect(r.ok).toBe(true);
+	});
+
 	test("accepts non-overlapping sibling paths", () => {
 		const a = baseTask({
 			id: "T-0001",

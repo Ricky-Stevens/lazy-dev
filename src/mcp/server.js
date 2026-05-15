@@ -23,7 +23,7 @@ import { reviewBuildTool } from "./tools/review-build.js";
 import { statusTool } from "./tools/status.js";
 
 const SCHEMA_VERSION = 1;
-const SERVER_VERSION = "0.9.0";
+const SERVER_VERSION = "0.10.0";
 
 // Registry: each entry = { name, description, inputSchema, handler }.
 // Handlers receive validated params + a shared ctx (projectDir).
