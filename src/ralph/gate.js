@@ -136,6 +136,10 @@ async function main() {
 	}
 
 	if (isPerRun) {
+		if (usageRunId) {
+			const retryMsg = verifyPerRunOutput(projectDir, usageRunId, bareAgentName, log);
+			if (retryMsg) return emitRetry(retryMsg);
+		}
 		log(`per-run agent ${agentType}; usage recorded, no task-level gate work`);
 		return;
 	}
@@ -307,6 +311,43 @@ function locateEnvelope(projectDir, runId, taskId) {
 	const mergePath = join(projectDir, ".lazy-dev", "runs", runId, "merges", taskId, "envelope.json");
 	if (existsSync(mergePath)) return { path: mergePath, kind: "merge" };
 	return null;
+}
+
+const PER_RUN_MAX_RETRIES = 2;
+
+function verifyPerRunOutput(projectDir, runId, bareAgentName, log) {
+	const runDir = join(projectDir, ".lazy-dev", "runs", runId);
+	let missing = null;
+
+	if (bareAgentName === "planner" || bareAgentName.startsWith("planner-")) {
+		const need = [];
+		if (!existsSync(join(runDir, "master-spec.md"))) need.push("master-spec.md");
+		if (!existsSync(join(runDir, "tasks.json"))) need.push("tasks.json");
+		if (need.length) missing = need;
+	} else if (bareAgentName === "reviewer" || bareAgentName.startsWith("reviewer-")) {
+		if (!existsSync(join(runDir, "review.md"))) missing = ["review.md"];
+	}
+
+	if (!missing) return null;
+
+	const counterPath = join(runDir, `.${bareAgentName}-retries`);
+	let count = 0;
+	try {
+		count = parseInt(readFileSync(counterPath, "utf8").trim(), 10) || 0;
+	} catch {}
+
+	if (count >= PER_RUN_MAX_RETRIES) {
+		log(`per-run ${bareAgentName} output missing after ${count} retries; letting through`);
+		return null;
+	}
+	writeFileSync(counterPath, String(count + 1));
+
+	const list = missing.join(" and ");
+	return (
+		`You completed but ${list} not found in ${runDir}. ` +
+		`You MUST use the Write tool to persist ${missing.length > 1 ? "these files" : "this file"}. ` +
+		`Do not output file content in your response text — call the Write tool directly.`
+	);
 }
 
 function clearRetryPendingFailure(state) {

@@ -113,6 +113,7 @@ Effort selection: default to medium. Downshift to low only when the edit is mech
 - A source file and its test file are always ONE task. Never split them.
 - A task whose estimated output exceeds `budget.max_output_tokens × 2` must be split.
 - If the decomposition exceeds 8 tasks, reconsider scope. 10+ tasks usually means the brief should be split into multiple /lazy-dev:run invocations — emit BLOCKED with that suggestion.
+- Never use `**` in `allowed_paths` — it overlaps with security-forbidden patterns (.env, .pem, .key) and will be rejected. Use specific extensions instead: `cmd/*.go`, `migrations/*.sql`, `.github/workflows/*.yml`.
 - Never assign overlapping `allowed_paths` without a `depends_on` edge.
 - Never schedule `planner`, `reviewer`, `merger`, or `wrangler` in `tasks.json`.
 - Write valid JSON only. No trailing commas.

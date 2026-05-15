@@ -73,7 +73,10 @@ function planPhase(ctx) {
 	const masterSpec = join(runDir, "master-spec.md");
 	const tasksJson = join(runDir, "tasks.json");
 	if (!existsSync(masterSpec) || !existsSync(tasksJson)) {
-		return { phase: "plan", action: "dispatch_planner" };
+		const budgetErr = checkBudgetCap(ctx, "planning");
+		if (budgetErr) return budgetErr;
+		const warning = checkBudgetWarning(ctx);
+		return { phase: "plan", action: "dispatch_planner", warning };
 	}
 	const plan = readJsonSafe(tasksJson);
 	const cfg = readRunConfig(projectDir, runId);
@@ -141,19 +144,9 @@ function specialistsPhase(ctx) {
 	// — skip the I/O on wait polls where nothing has changed.
 	let warning = null;
 	if (next.kind !== "wait") {
-		const usage = readUsage(projectDir, runId);
-		const runCap = cfg.budget?.per_run || {};
-		if (runCap.max_input_tokens && usage.totals.input_tokens >= runCap.max_input_tokens) {
-			return { phase: "error", action: "surface", detail: "per-run input-token cap reached" };
-		}
-		if (runCap.max_output_tokens && usage.totals.output_tokens >= runCap.max_output_tokens) {
-			return { phase: "error", action: "surface", detail: "per-run output-token cap reached" };
-		}
-		const warnPct = cfg.budget?.warn_at_pct ?? 70;
-		if (runCap.max_output_tokens) {
-			const pct = (usage.totals.output_tokens / runCap.max_output_tokens) * 100;
-			if (pct >= warnPct) warning = `output tokens at ${pct.toFixed(0)}% of per-run cap`;
-		}
+		const budgetErr = checkBudgetCap(ctx, "specialists");
+		if (budgetErr) return budgetErr;
+		warning = checkBudgetWarning(ctx);
 	}
 
 	switch (next.kind) {
@@ -195,7 +188,11 @@ function specialistsPhase(ctx) {
 function reviewPhase(ctx) {
 	const { runDir, runId, projectDir, status } = ctx;
 	const reviewPath = join(runDir, "review.md");
-	if (!existsSync(reviewPath)) return { phase: "review", action: "dispatch_reviewer" };
+	if (!existsSync(reviewPath)) {
+		const budgetErr = checkBudgetCap(ctx, "review");
+		if (budgetErr) return budgetErr;
+		return { phase: "review", action: "dispatch_reviewer" };
+	}
 
 	const reviewSize = statSync(reviewPath).size;
 	if (reviewSize > 2 * 1024 * 1024) {
@@ -247,6 +244,47 @@ function reviewPhase(ctx) {
 	}
 
 	return { phase: "error", action: "surface", detail: "could not parse reviewer verdict" };
+}
+
+// ── budget ─────────────────────────────────────────────────────────────────
+
+function checkBudgetCap(ctx, phase) {
+	const { runId, projectDir } = ctx;
+	const cfg = readRunConfig(projectDir, runId);
+	const runCap = cfg.budget?.per_run || {};
+	if (!runCap.max_input_tokens && !runCap.max_output_tokens) return null;
+
+	const usage = readUsage(projectDir, runId);
+	if (runCap.max_input_tokens && usage.totals.input_tokens >= runCap.max_input_tokens) {
+		return {
+			phase: "error",
+			action: "surface",
+			detail: `per-run input-token cap reached during ${phase} (${usage.totals.input_tokens} of ${runCap.max_input_tokens} used)`,
+		};
+	}
+	if (runCap.max_output_tokens && usage.totals.output_tokens >= runCap.max_output_tokens) {
+		return {
+			phase: "error",
+			action: "surface",
+			detail: `per-run output-token cap reached during ${phase} (${usage.totals.output_tokens} of ${runCap.max_output_tokens} used)`,
+		};
+	}
+	return null;
+}
+
+function checkBudgetWarning(ctx) {
+	const { runId, projectDir } = ctx;
+	const cfg = readRunConfig(projectDir, runId);
+	const runCap = cfg.budget?.per_run || {};
+	if (!runCap.max_output_tokens) return null;
+
+	const usage = readUsage(projectDir, runId);
+	const pct = (usage.totals.output_tokens / runCap.max_output_tokens) * 100;
+	const warnPct = cfg.budget?.warn_at_pct ?? 70;
+	if (pct >= warnPct) {
+		return `output tokens at ${pct.toFixed(0)}% of per-run cap (${usage.totals.output_tokens} of ${runCap.max_output_tokens})`;
+	}
+	return null;
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────

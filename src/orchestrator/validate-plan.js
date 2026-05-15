@@ -74,7 +74,10 @@ export function validatePlan(plan, options = {}) {
 			for (const ap of t.scope.allowed_paths) {
 				for (const fg of forbiddenGlobal) {
 					if (globsMayOverlap(ap, fg)) {
-						errors.push(`${tag}: allowed_path ${ap} overlaps forbidden global ${fg}`);
+						errors.push(
+							`${tag}: allowed_path "${ap}" overlaps forbidden pattern "${fg}". ` +
+								`Replace ** with specific extensions (e.g., "${ap.replace(/\*\*$/, "*.go")}").`,
+						);
 					}
 				}
 			}

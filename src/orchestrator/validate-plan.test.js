@@ -121,7 +121,7 @@ describe("validatePlan", () => {
 			{ forbiddenPathsGlobal: ["src/secrets/**"] },
 		);
 		expect(r.ok).toBe(false);
-		expect(r.errors.join("\n")).toContain("forbidden global");
+		expect(r.errors.join("\n")).toContain("forbidden pattern");
 	});
 
 	test("accepts allowed_paths disjoint from forbidden_paths_global", () => {
