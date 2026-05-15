@@ -129,7 +129,9 @@ function planPhase(ctx) {
 		})),
 	};
 	advancePhase(ctx, "approve");
-	return { phase: "approve", action: "show_gate", summary };
+	const gateResponse = { phase: "approve", action: "show_gate", summary };
+	if (result.warnings?.length) gateResponse.warnings = result.warnings;
+	return gateResponse;
 }
 
 function approvePhase(ctx) {

@@ -33,6 +33,7 @@ const VALID_AGENTS = new Set([
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: plan validation checks many interdependent constraints (agent names, paths, deps, scopes); splitting would scatter related checks across files
 export function validatePlan(plan, options = {}) {
 	const errors = [];
+	const warnings = [];
 	const forbiddenGlobal = options.forbiddenPathsGlobal || [];
 	const mergeSafe = new Set(options.mergeSafePaths || []);
 
@@ -153,10 +154,16 @@ export function validatePlan(plan, options = {}) {
 				if (!VALID_KINDS.has(c.kind)) errors.push(`${ctag}: unknown kind ${c.kind}`);
 				if (c.kind === "shell") {
 					if (typeof c.cmd !== "string") errors.push(`${ctag}: shell needs cmd`);
-					else if (/(?:^|\s)cd\s+/.test(c.cmd))
-						errors.push(
-							`${ctag}: shell cmd contains "cd ..." — verifiers run in the worktree automatically. Use bare commands without cd.`,
-						);
+					else {
+						if (/(?:^|\s)cd\s+/.test(c.cmd))
+							errors.push(
+								`${ctag}: shell cmd contains "cd ..." — verifiers run in the worktree automatically. Use bare commands without cd.`,
+							);
+						if (/^\s*grep\s/.test(c.cmd))
+							warnings.push(
+								`${ctag}: shell cmd is a grep command — use the built-in "grep" kind instead (portable, JS regex, better error messages).`,
+							);
+					}
 				}
 				if (c.kind === "grep") {
 					if (typeof c.pattern !== "string") errors.push(`${ctag}: grep needs pattern`);
@@ -235,7 +242,9 @@ export function validatePlan(plan, options = {}) {
 		}
 	}
 
-	return errors.length ? { ok: false, errors } : { ok: true };
+	const result = errors.length ? { ok: false, errors } : { ok: true };
+	if (warnings.length) result.warnings = warnings;
+	return result;
 }
 
 // Transitive depends_on reachability. reaches.get(A) = set of ids A depends on (directly or indirectly).

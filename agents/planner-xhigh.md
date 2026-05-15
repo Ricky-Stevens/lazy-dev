@@ -63,9 +63,10 @@ Path to `.lazy-dev/runs/<run-id>/brief.md`.
      ]
      ```
      `diff_scope` is the most important verifier -- it ensures specialists stay within their `scope.allowed_paths`. No additional fields needed; it checks against the envelope's `scope.allowed_paths` automatically.
+     Prefer built-in kinds (`grep`, `file_exists`, `diff_scope`) over `shell` when possible — they are portable and produce better error messages. Only use `shell` for build/test commands that need a real process. Never use `shell` + `grep` CLI when the `grep` kind does the same thing — the built-in `grep` uses JS regex (supports `|` alternation natively) and avoids shell quoting issues.
      All verifier paths and commands run relative to the task's worktree:
      - `shell` `cmd`: bare commands only (`go build ./...`, `bun test`). NEVER `cd /absolute/path && ...`.
-     - `grep` `in_file`/`in_glob`: relative paths only (`internal/foo.go`, `cmd/*.go`). NEVER absolute.
+     - `grep` `in_file`/`in_glob`: relative paths only (`internal/foo.go`, `cmd/*.go`). NEVER absolute. Pattern is a JavaScript regex — use `|` for alternation, not `\|`.
      - `file_exists` `path`: relative to worktree root. NEVER absolute.
      - Criterion `id` values must be unique within a task.
      Every item must be mechanically checkable. A task without mechanical criteria is over-scoped; split it.
