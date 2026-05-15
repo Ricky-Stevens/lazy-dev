@@ -9,7 +9,7 @@
       "name": "lazy-dev",
       "source": "./",
       "description": "Claude Code plugin for big tasks. Right-sized agents, worktree isolation, cost control.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "Ricky Stevens"
       },
