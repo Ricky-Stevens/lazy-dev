@@ -20,12 +20,12 @@ import { withRunLock } from "../mcp/_lock.js";
 import { requireSafeId } from "../mcp/_validation.js";
 import { readUsage } from "../ralph/usage.js";
 import { parsePerTaskVerdicts, parseReviewVerdict } from "../shared/parse-verdicts.js";
+import { buildGateSummary } from "./extract-plan-summary.js";
 import { planIsSimple } from "./plan-gate.js";
 import { integrationTestPhase, mergePhase } from "./plan-next-merge.js";
 import { pruneCore } from "./prune.js";
 import { scheduleNext } from "./schedule.js";
 import { readRunConfig } from "./settings.js";
-import { buildGateSummary } from "./extract-plan-summary.js";
 import { validatePlan } from "./validate-plan.js";
 
 const DEFAULT_MAX_REVIEW_RETRIES = 1;
@@ -108,10 +108,7 @@ function planPhase(ctx) {
 	const tasks = plan.tasks;
 
 	if (planIsSimple(tasks, cfg)) {
-		writeFileSync(
-			join(runDir, "approval.md"),
-			"Auto-approved (simple plan, under threshold).\n",
-		);
+		writeFileSync(join(runDir, "approval.md"), "Auto-approved (simple plan, under threshold).\n");
 		advancePhase(ctx, "specialists");
 		return specialistsPhase(ctx);
 	}

@@ -28,9 +28,7 @@ export function planIsSimple(tasks, cfg = {}) {
 	}
 	const threshold = cfg.approval || {};
 	const maxTasks = threshold.auto_approve_max_tasks ?? 3;
-	const gateAgents = new Set(
-		threshold.require_gate_agents || ["code-big"],
-	);
+	const gateAgents = new Set(threshold.require_gate_agents || ["code-big"]);
 	if (!Array.isArray(tasks) || tasks.length === 0) return true;
 	// Any task using a gate-required agent forces the gate regardless of count.
 	if (tasks.some((t) => gateAgents.has(t.agent))) return false;

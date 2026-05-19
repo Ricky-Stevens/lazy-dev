@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildGateSummary, extractPlanSummary } from "./extract-plan-summary.js";
@@ -97,13 +97,9 @@ describe("extractPlanSummary", () => {
 	test("scope_in and scope_out do not cross-match", () => {
 		const p = writeSpec(
 			"scope",
-			[
-				"# Spec",
-				"## Scope -- in",
-				"- Feature A",
-				"## Scope -- explicitly out",
-				"- Feature B",
-			].join("\n"),
+			["# Spec", "## Scope -- in", "- Feature A", "## Scope -- explicitly out", "- Feature B"].join(
+				"\n",
+			),
 		);
 		const s = extractPlanSummary(p);
 		expect(s.scope_in).toContain("Feature A");

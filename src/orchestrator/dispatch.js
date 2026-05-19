@@ -174,9 +174,7 @@ export function dispatch({ runId, taskId, projectDir }) {
 			high: " — reason carefully, check edge cases.",
 			max: " — this is architecturally critical. Take all the time you need.",
 		};
-		const effortLine = effort
-			? `\nEffort: ${effort}${effortHints[effort] || "."}`
-			: "";
+		const effortLine = effort ? `\nEffort: ${effort}${effortHints[effort] || "."}` : "";
 		const envelope = readJsonSafe(envelopePath);
 		const retryLine = envelope?.reviewer_notes
 			? "\n\nThis is a RETRY. Your envelope contains reviewer_notes with specific feedback from the previous review. Read reviewer_notes before starting work."

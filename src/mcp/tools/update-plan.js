@@ -1,12 +1,11 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { buildGateSummary } from "../../orchestrator/extract-plan-summary.js";
+import { readRunConfig } from "../../orchestrator/settings.js";
+import { validatePlan } from "../../orchestrator/validate-plan.js";
 import { atomicWrite, readJsonBounded } from "../_io.js";
 import { withRunLock } from "../_lock.js";
 import { resolveRunDir } from "../_paths.js";
 import { JSON_MAX_BYTES, MARKDOWN_MAX_BYTES, SAFE_ID_PATTERN } from "../_validation.js";
-import { buildGateSummary } from "../../orchestrator/extract-plan-summary.js";
-import { validatePlan } from "../../orchestrator/validate-plan.js";
-import { readRunConfig } from "../../orchestrator/settings.js";
 
 export const updatePlanTool = {
 	name: "update_plan",

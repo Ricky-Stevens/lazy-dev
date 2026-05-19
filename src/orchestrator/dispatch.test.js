@@ -199,14 +199,7 @@ describe("dispatch — reviewer notes on retry", () => {
 			setupDispatchRun("run-retry-notes", [
 				{ id: "T-0001", agent: "code-medium", title: "Retry test" },
 			]);
-			const taskDir = join(
-				projectDir,
-				".lazy-dev",
-				"runs",
-				"run-retry-notes",
-				"tasks",
-				"T-0001",
-			);
+			const taskDir = join(projectDir, ".lazy-dev", "runs", "run-retry-notes", "tasks", "T-0001");
 			mkdirSync(taskDir, { recursive: true });
 			writeFileSync(
 				join(taskDir, "envelope.json"),

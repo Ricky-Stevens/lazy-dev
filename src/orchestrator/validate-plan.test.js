@@ -234,7 +234,9 @@ describe("validatePlan", () => {
 		const r = validatePlan({
 			tasks: [
 				baseTask({
-					completion_criteria: [{ id: "bad_regex", kind: "grep", pattern: "[invalid(", in_file: "a.js" }],
+					completion_criteria: [
+						{ id: "bad_regex", kind: "grep", pattern: "[invalid(", in_file: "a.js" },
+					],
 				}),
 			],
 		});
@@ -247,7 +249,13 @@ describe("validatePlan", () => {
 			tasks: [
 				baseTask({
 					completion_criteria: [
-						{ id: "good_regex", kind: "grep", pattern: "export\\s+(default|const)", in_file: "a.js", must_match: true },
+						{
+							id: "good_regex",
+							kind: "grep",
+							pattern: "export\\s+(default|const)",
+							in_file: "a.js",
+							must_match: true,
+						},
 					],
 				}),
 			],
