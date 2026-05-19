@@ -35,10 +35,10 @@ describe("acquireRunLock", () => {
 		expect(existsSync(join(dir, ".lock"))).toBe(false);
 	});
 
-	test("reclaims a stale lock (mtime > 5s)", () => {
+	test("reclaims a stale lock (mtime > threshold)", () => {
 		const lockFile = join(dir, ".lock");
 		writeFileSync(lockFile, "stale");
-		const past = new Date(Date.now() - 10_000);
+		const past = new Date(Date.now() - 200_000);
 		utimesSync(lockFile, past, past);
 		const release = acquireRunLock(dir);
 		release();

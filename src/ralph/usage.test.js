@@ -39,7 +39,7 @@ describe("recordUsage", () => {
 
 	test("groups by model and by effort", () => {
 		recordUsage(projectDir, "run-2", {
-			agent_type: "lazy-dev:code-small",
+			agent_type: "lazy-dev:code-medium",
 			model_actual: "claude-sonnet-4-6",
 			model_expected: "claude-sonnet-4-6",
 			effort_expected: "medium",
@@ -55,19 +55,18 @@ describe("recordUsage", () => {
 			output_tokens: 150,
 		});
 		recordUsage(projectDir, "run-2", {
-			agent_type: "lazy-dev:code-small-low",
-			model_actual: "claude-sonnet-4-6",
-			model_expected: "claude-sonnet-4-6",
+			agent_type: "lazy-dev:code-small",
+			model_actual: "claude-haiku-4-5",
+			model_expected: "claude-haiku-4-5",
 			effort_expected: "low",
 			input_tokens: 50,
 			output_tokens: 25,
 		});
 		const data = readUsage(projectDir, "run-2");
 
-		// Same model across two agents → accumulated in by_model
-		expect(data.by_model["claude-sonnet-4-6"].calls).toBe(2);
-		expect(data.by_model["claude-sonnet-4-6"].input_tokens).toBe(150);
+		expect(data.by_model["claude-sonnet-4-6"].calls).toBe(1);
 		expect(data.by_model["claude-opus-4-7"].calls).toBe(1);
+		expect(data.by_model["claude-haiku-4-5"].calls).toBe(1);
 
 		// Effort buckets
 		expect(data.by_effort.low.calls).toBe(1);

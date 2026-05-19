@@ -32,9 +32,9 @@ afterAll(async () => {
 });
 
 describe("MCP server: tool surface", () => {
-	test("exposes exactly 12 lazy-dev tools with JSON Schema input", async () => {
+	test("exposes exactly 13 lazy-dev tools with JSON Schema input", async () => {
 		const { tools } = await client.listTools();
-		expect(tools).toHaveLength(12);
+		expect(tools).toHaveLength(13);
 		const names = tools.map((t) => t.name).sort();
 		expect(names).toEqual(
 			[
@@ -50,6 +50,7 @@ describe("MCP server: tool surface", () => {
 				"retry_tasks",
 				"review_build",
 				"status",
+				"update_plan",
 			].sort(),
 		);
 		for (const t of tools) {

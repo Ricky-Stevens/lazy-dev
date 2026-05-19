@@ -134,6 +134,117 @@ describe("dispatch — full round-trip with worktree", () => {
 	});
 });
 
+describe("dispatch — task-level effort override", () => {
+	test("task.effort overrides agent file default in dispatch prompt", () => {
+		const pluginRoot = resolve(import.meta.dirname, "..", "..");
+		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+		try {
+			setupDispatchRun("run-effort", [
+				{ id: "T-0001", agent: "code-medium", effort: "high", title: "Effort test" },
+			]);
+
+			const result = dispatch({ runId: "run-effort", taskId: "T-0001", projectDir });
+			expect(result.dispatch_prompt).toContain("Effort: high");
+			expect(result.dispatch_prompt).toContain("reason carefully");
+		} finally {
+			if (savedPR !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPR;
+			else delete process.env.CLAUDE_PLUGIN_ROOT;
+		}
+	});
+
+	test("falls back to agent file effort when task.effort is absent", () => {
+		const pluginRoot = resolve(import.meta.dirname, "..", "..");
+		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+		try {
+			setupDispatchRun("run-effort-default", [
+				{ id: "T-0001", agent: "code-small", title: "Default effort" },
+			]);
+
+			const result = dispatch({ runId: "run-effort-default", taskId: "T-0001", projectDir });
+			expect(result.dispatch_prompt).toContain("Effort: low");
+			expect(result.dispatch_prompt).toContain("move fast");
+		} finally {
+			if (savedPR !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPR;
+			else delete process.env.CLAUDE_PLUGIN_ROOT;
+		}
+	});
+
+	test("max effort includes correct guidance text", () => {
+		const pluginRoot = resolve(import.meta.dirname, "..", "..");
+		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+		try {
+			setupDispatchRun("run-effort-max", [
+				{ id: "T-0001", agent: "code-big", effort: "max", title: "Max effort" },
+			]);
+
+			const result = dispatch({ runId: "run-effort-max", taskId: "T-0001", projectDir });
+			expect(result.dispatch_prompt).toContain("Effort: max");
+			expect(result.dispatch_prompt).toContain("architecturally critical");
+		} finally {
+			if (savedPR !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPR;
+			else delete process.env.CLAUDE_PLUGIN_ROOT;
+		}
+	});
+});
+
+describe("dispatch — reviewer notes on retry", () => {
+	test("dispatch prompt includes retry notice when envelope has reviewer_notes", () => {
+		const pluginRoot = resolve(import.meta.dirname, "..", "..");
+		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+		try {
+			setupDispatchRun("run-retry-notes", [
+				{ id: "T-0001", agent: "code-medium", title: "Retry test" },
+			]);
+			const taskDir = join(
+				projectDir,
+				".lazy-dev",
+				"runs",
+				"run-retry-notes",
+				"tasks",
+				"T-0001",
+			);
+			mkdirSync(taskDir, { recursive: true });
+			writeFileSync(
+				join(taskDir, "envelope.json"),
+				JSON.stringify({
+					id: "T-0001",
+					agent: "code-medium",
+					dispatched_at: "2025-01-01T00:00:00Z",
+					reviewer_notes: "Fix the import order in auth.js",
+				}),
+			);
+
+			const result = dispatch({ runId: "run-retry-notes", taskId: "T-0001", projectDir });
+			expect(result.dispatch_prompt).toContain("RETRY");
+			expect(result.dispatch_prompt).toContain("reviewer_notes");
+		} finally {
+			if (savedPR !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPR;
+			else delete process.env.CLAUDE_PLUGIN_ROOT;
+		}
+	});
+
+	test("dispatch prompt has no retry notice on fresh dispatch", () => {
+		const pluginRoot = resolve(import.meta.dirname, "..", "..");
+		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+		try {
+			setupDispatchRun("run-fresh-dispatch", [
+				{ id: "T-0001", agent: "code-medium", title: "Fresh test" },
+			]);
+
+			const result = dispatch({ runId: "run-fresh-dispatch", taskId: "T-0001", projectDir });
+			expect(result.dispatch_prompt).not.toContain("RETRY");
+		} finally {
+			if (savedPR !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPR;
+			else delete process.env.CLAUDE_PLUGIN_ROOT;
+		}
+	});
+});
+
 describe("dispatch CLI", () => {
 	test("CLI returns usage error without args", () => {
 		const result = spawnSync("node", [CLI_PATH], {

@@ -22,6 +22,8 @@ export function resolveFromSentinel(projectDir, parsed) {
 	if (runIdHint && typeof runIdHint === "string" && /^[\w.:-]+$/.test(runIdHint)) {
 		const envPath = join(runsDir, runIdHint, "tasks", taskId, "envelope.json");
 		if (existsSync(envPath)) return { runId: runIdHint, taskId };
+		const mergeEnv = join(runsDir, runIdHint, "merges", taskId, "envelope.json");
+		if (existsSync(mergeEnv)) return { runId: runIdHint, taskId, isMerge: true };
 	}
 
 	// Slow path: scan run directories sorted by mtime descending.
@@ -39,6 +41,8 @@ export function resolveFromSentinel(projectDir, parsed) {
 	for (const { e } of entries) {
 		const envPath = join(runsDir, e, "tasks", taskId, "envelope.json");
 		if (existsSync(envPath)) return { runId: e, taskId };
+		const mergeEnv = join(runsDir, e, "merges", taskId, "envelope.json");
+		if (existsSync(mergeEnv)) return { runId: e, taskId, isMerge: true };
 	}
 	return null;
 }

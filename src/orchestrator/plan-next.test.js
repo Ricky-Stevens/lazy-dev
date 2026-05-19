@@ -38,7 +38,7 @@ const simpleTask = (id, agent = "code-small") => ({
 });
 
 describe("planPhase auto-approval", () => {
-	test("simple plan (≤3 tasks, no code-big) auto-approves and advances to specialists", () => {
+	test("simple plan auto-approves and advances to specialists", () => {
 		writePlan([simpleTask("T-0001"), simpleTask("T-0002")]);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("specialists");
@@ -76,6 +76,83 @@ describe("planPhase auto-approval", () => {
 		const result = planNext({ runId, projectDir });
 		expect(result.action).toBe("show_gate");
 		expect(existsSync(join(runDir, "approval.md"))).toBe(false);
+	});
+
+	test("show_gate summary includes plan_summary, model, effort, and goal per task", () => {
+		const taskWithEffort = {
+			...simpleTask("T-0001", "code-big"),
+			effort: "high",
+			depends_on: [],
+		};
+		const taskDep = {
+			...simpleTask("T-0002", "code-medium"),
+			effort: "medium",
+			depends_on: ["T-0001"],
+		};
+		const specMd = [
+			"# Master Spec -- Add rate limiting",
+			"",
+			"## Problem",
+			"API has no rate limiting.",
+			"",
+			"## Goal",
+			"Sliding window rate limiter on all endpoints.",
+			"",
+			"## Approach",
+			"Use Redis sorted sets for sliding window tracking.",
+			"",
+			"## Scope -- in",
+			"- Rate limit middleware",
+			"- Redis integration",
+			"",
+			"## Scope -- explicitly out",
+			"- Dashboard UI",
+			"",
+			"## Risks and known gotchas",
+			"- Redis must be available at deploy time.",
+		].join("\n");
+		writeFileSync(join(runDir, "master-spec.md"), specMd);
+		writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks: [taskWithEffort, taskDep] }));
+		const result = planNext({ runId, projectDir });
+		expect(result.action).toBe("show_gate");
+
+		const { summary } = result;
+		expect(summary.plan_summary).toBeDefined();
+		expect(summary.plan_summary.title).toBe("Add rate limiting");
+		expect(summary.plan_summary.problem).toContain("no rate limiting");
+		expect(summary.plan_summary.goal).toContain("Sliding window");
+		expect(summary.plan_summary.approach).toContain("Redis sorted sets");
+		expect(summary.plan_summary.scope_in).toContain("Rate limit middleware");
+		expect(summary.plan_summary.scope_out).toContain("Dashboard UI");
+		expect(summary.plan_summary.risks).toContain("Redis must be available");
+		expect(summary.spec).toBeUndefined();
+		expect(summary.tasks[0].model).toBe("Opus");
+		expect(summary.tasks[0].effort).toBe("high");
+		expect(summary.tasks[0].goal).toBe("Implement T-0001");
+		expect(summary.tasks[1].model).toBe("Sonnet");
+		expect(summary.tasks[1].effort).toBe("medium");
+		expect(summary.tasks[1].depends_on).toEqual(["T-0001"]);
+	});
+
+	test("plan_summary gracefully handles minimal spec", () => {
+		writeFileSync(join(runDir, "master-spec.md"), "# Spec\n\nNo sections.");
+		writeFileSync(
+			join(runDir, "tasks.json"),
+			JSON.stringify({
+				tasks: [
+					simpleTask("T-0001", "code-big"),
+					simpleTask("T-0002", "code-big"),
+					simpleTask("T-0003", "code-big"),
+					simpleTask("T-0004", "code-big"),
+				],
+			}),
+		);
+		const result = planNext({ runId, projectDir });
+		expect(result.action).toBe("show_gate");
+		expect(result.summary.plan_summary).toBeDefined();
+		expect(result.summary.plan_summary.title).toBe("Spec");
+		expect(result.summary.plan_summary.problem).toBeNull();
+		expect(result.summary.plan_summary.approach).toBeNull();
 	});
 
 	test("single-task simple plan auto-approves", () => {

@@ -3,8 +3,6 @@
 import { globsIntersect, globsMayOverlap } from "./glob-overlap.js";
 
 // Orchestrator-managed agents are dispatched by plan_next, not by tasks.json.
-// Any variant (e.g. planner-max, reviewer-xhigh) falls in the same bucket —
-// prefix-matched below, so we don't have to enumerate every effort level.
 const ORCHESTRATOR_MANAGED_PREFIXES = ["planner", "reviewer", "merger", "wrangler", "orchestrator"];
 
 function isOrchestratorManaged(agentName) {
@@ -14,21 +12,32 @@ function isOrchestratorManaged(agentName) {
 }
 
 const VALID_KINDS = new Set(["shell", "grep", "file_exists", "diff_scope"]);
-// Base specialists and their effort variants. The suffixed forms (-low, -high)
-// are dispatched identically but carry different effort frontmatter, letting
-// the planner spend more or less reasoning per task.
 const VALID_AGENTS = new Set([
 	"code-small",
-	"code-small-low",
-	"code-small-high",
+	"code-medium",
 	"code-big",
-	"code-big-low",
-	"code-big-high",
 	"debug",
 	"research",
 	"docs",
 	"format",
 ]);
+const VALID_EFFORTS = new Set(["low", "medium", "high", "max"]);
+
+const AGENT_MODEL_TIER = {
+	"code-small": "haiku",
+	"code-medium": "sonnet",
+	"code-big": "opus",
+	debug: "opus",
+	research: "sonnet",
+	docs: "haiku",
+	format: "haiku",
+};
+
+const EFFORTS_FOR_TIER = {
+	haiku: new Set(["low", "medium"]),
+	sonnet: new Set(["low", "medium", "high"]),
+	opus: new Set(["low", "medium", "high", "max"]),
+};
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: plan validation checks many interdependent constraints (agent names, paths, deps, scopes); splitting would scatter related checks across files
 export function validatePlan(plan, options = {}) {
@@ -66,6 +75,22 @@ export function validatePlan(plan, options = {}) {
 		else if (isOrchestratorManaged(t.agent))
 			errors.push(`${tag}: agent ${t.agent} is orchestrator-managed; do not schedule it`);
 		else if (!VALID_AGENTS.has(t.agent)) errors.push(`${tag}: unknown agent ${t.agent}`);
+
+		if (t.effort !== undefined) {
+			if (!VALID_EFFORTS.has(t.effort)) {
+				errors.push(
+					`${tag}: unknown effort "${t.effort}"; pick one of ${Array.from(VALID_EFFORTS).join(", ")}`,
+				);
+			} else {
+				const tier = AGENT_MODEL_TIER[t.agent];
+				const tierEfforts = tier && EFFORTS_FOR_TIER[tier];
+				if (tierEfforts && !tierEfforts.has(t.effort)) {
+					warnings.push(
+						`${tag}: effort "${t.effort}" is not effective for ${t.agent} (${tier}); supported: ${Array.from(tierEfforts).join(", ")}`,
+					);
+				}
+			}
+		}
 
 		if (typeof t.goal !== "string" || !t.goal)
 			errors.push(`${tag}: missing goal — specialist needs this to understand the task`);
@@ -167,6 +192,13 @@ export function validatePlan(plan, options = {}) {
 				}
 				if (c.kind === "grep") {
 					if (typeof c.pattern !== "string") errors.push(`${ctag}: grep needs pattern`);
+					else {
+						try {
+							new RegExp(c.pattern, "m");
+						} catch (e) {
+							errors.push(`${ctag}: grep pattern is invalid regex: ${e.message}`);
+						}
+					}
 					if (!c.in_file && !c.in_glob) errors.push(`${ctag}: grep needs in_file or in_glob`);
 					if (typeof c.in_file === "string" && c.in_file.startsWith("/"))
 						errors.push(`${ctag}: in_file must be relative to worktree, not absolute`);

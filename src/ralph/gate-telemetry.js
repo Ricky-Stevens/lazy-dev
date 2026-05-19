@@ -64,7 +64,7 @@ export function recordAgentUsage({
 				`model verify: agent=${agentType} task=${taskId || "(per-run)"} model=${modelInfo.model} effort=${expectedEffort || "(unset)"}`,
 			);
 		}
-		if (expectedModel && modelInfo.model && expectedModel !== modelInfo.model) {
+		if (expectedModel && modelInfo.model && !modelInfo.model.startsWith(expectedModel)) {
 			entry.model_mismatch = true;
 			logDebug(
 				`WARN model mismatch: agent=${agentType} task=${taskId || "(per-run)"} expected=${expectedModel} actual=${modelInfo.model}`,

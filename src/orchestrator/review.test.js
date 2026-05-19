@@ -73,7 +73,7 @@ describe("reviewBuild", () => {
 		setupReviewRun(pd, "run-rb2", [{ id: "T-0001", agent: "code-small" }]);
 
 		const result = reviewBuild({ runId: "run-rb2", projectDir: pd, effort: "xhigh" });
-		expect(result.agent_namespaced).toBe("lazy-dev:reviewer-xhigh");
+		expect(result.agent_namespaced).toBe("lazy-dev:reviewer");
 		expect(result.effort).toBe("xhigh");
 	});
 

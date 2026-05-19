@@ -5,9 +5,8 @@
 // dispatch / review_build / merger_envelope: every subagent dispatch prompt
 // comes from an orchestrator function, never hand-written by the wrangler.
 //
-// The wrangler picks `effort` based on brief complexity; this function maps
-// it to the right agent variant. "high" is the default (= bare `lazy-dev:planner`),
-// other values resolve to `lazy-dev:planner-<effort>`.
+// The wrangler picks `effort` based on brief complexity; effort is passed
+// in the dispatch prompt, not encoded in the agent name.
 //
 // Importable (MCP) or runnable (CLI).
 //
@@ -18,8 +17,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { requireSafeId } from "../mcp/_validation.js";
 
-// Canonical effort ladder for Opus-backed per-run agents.
-// high is the default (bare agent); variants cover cheaper/pricier ends.
 export const PLANNER_EFFORTS = new Set(["medium", "high", "xhigh", "max"]);
 
 export function plannerDispatch({ runId, projectDir, effort = "high" }) {
@@ -34,7 +31,7 @@ export function plannerDispatch({ runId, projectDir, effort = "high" }) {
 	const briefPath = join(runDir, "brief.md");
 	if (!existsSync(briefPath)) throw new Error(`brief missing at ${briefPath}`);
 
-	const agentNamespaced = effort === "high" ? "lazy-dev:planner" : `lazy-dev:planner-${effort}`;
+	const agentNamespaced = "lazy-dev:planner";
 
 	return {
 		agent_namespaced: agentNamespaced,

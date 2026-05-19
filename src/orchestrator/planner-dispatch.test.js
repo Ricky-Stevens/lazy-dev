@@ -29,22 +29,12 @@ describe("plannerDispatch effort routing", () => {
 		expect(r.agent_namespaced).toBe("lazy-dev:planner");
 	});
 
-	test("medium → lazy-dev:planner-medium", () => {
-		expect(plannerDispatch({ runId, projectDir, effort: "medium" }).agent_namespaced).toBe(
-			"lazy-dev:planner-medium",
-		);
-	});
-
-	test("xhigh → lazy-dev:planner-xhigh", () => {
-		expect(plannerDispatch({ runId, projectDir, effort: "xhigh" }).agent_namespaced).toBe(
-			"lazy-dev:planner-xhigh",
-		);
-	});
-
-	test("max → lazy-dev:planner-max", () => {
-		expect(plannerDispatch({ runId, projectDir, effort: "max" }).agent_namespaced).toBe(
-			"lazy-dev:planner-max",
-		);
+	test("all effort levels resolve to lazy-dev:planner", () => {
+		for (const effort of ["medium", "high", "xhigh", "max"]) {
+			const r = plannerDispatch({ runId, projectDir, effort });
+			expect(r.agent_namespaced).toBe("lazy-dev:planner");
+			expect(r.effort).toBe(effort);
+		}
 	});
 
 	test("rejects unknown effort", () => {

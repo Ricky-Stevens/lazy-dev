@@ -26,6 +26,19 @@ export const dispatchTool = {
 		required: ["run_id", "task_id"],
 	},
 	async handler({ run_id, task_id }, ctx) {
-		return dispatch({ runId: run_id, taskId: task_id, projectDir: ctx.projectDir });
+		try {
+			return dispatch({ runId: run_id, taskId: task_id, projectDir: ctx.projectDir });
+		} catch (err) {
+			if (err.dep_conflict) {
+				return {
+					dep_conflict: true,
+					dep_id: err.dep_id,
+					task_id: err.task_id,
+					conflicted_files: err.conflicted_files,
+					detail: err.message,
+				};
+			}
+			throw err;
+		}
 	},
 };

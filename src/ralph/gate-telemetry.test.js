@@ -220,6 +220,49 @@ describe("recordAgentUsage — model mismatch", () => {
 		}
 	});
 
+	test("date-suffixed model does not trigger false mismatch", () => {
+		const pd = join(tmpDir, "no-mismatch");
+		makeRunDir(pd, "r-ok");
+
+		const pluginRoot = join(tmpDir, "plugin-ok");
+		const agentDir = join(pluginRoot, "agents");
+		mkdirSync(agentDir, { recursive: true });
+		writeFileSync(
+			join(agentDir, "code-small.md"),
+			"---\nmodel: claude-haiku-4-5\neffort: low\n---\nSystem prompt.\n",
+		);
+
+		const transcriptPath = join(tmpDir, "transcript-ok.jsonl");
+		writeFileSync(transcriptPath, `${JSON.stringify({ model: "claude-haiku-4-5-20251001" })}\n`);
+
+		const savedPluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+		try {
+			const logs = [];
+			recordAgentUsage({
+				projectDir: pd,
+				runId: "r-ok",
+				agentId: "agent-ok",
+				agentType: "lazy-dev:code-small",
+				bareAgentName: "code-small",
+				taskId: "T-0001",
+				iteration: 1,
+				transcriptPath,
+				payload: {},
+				logDebug: (msg) => logs.push(msg),
+			});
+
+			const usage = JSON.parse(
+				readFileSync(join(pd, ".lazy-dev", "runs", "r-ok", "usage.json"), "utf8"),
+			);
+			expect(usage.by_iteration[0].model_mismatch).toBe(false);
+			expect(logs.some((l) => l.includes("WARN model mismatch"))).toBe(false);
+		} finally {
+			if (savedPluginRoot !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPluginRoot;
+			else delete process.env.CLAUDE_PLUGIN_ROOT;
+		}
+	});
+
 	test("reads model from nested request.model in transcript", () => {
 		const pd = join(tmpDir, "nested-model");
 		makeRunDir(pd, "r-nm");

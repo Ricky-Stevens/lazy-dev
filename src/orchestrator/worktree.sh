@@ -222,7 +222,11 @@ merge() {
     fi
     if git -C "$dir" merge --no-ff --no-edit "$branch" >&2; then
       echo "merged: $branch" >&2
-      $stashed && git -C "$dir" stash pop -q >&2 2>/dev/null || true
+      if $stashed; then
+        if ! git -C "$dir" stash pop -q >&2 2>/dev/null; then
+          echo "WARNING: stash pop failed after merge — your pre-merge changes are saved in 'git stash list'" >&2
+        fi
+      fi
       return 0
     fi
     git -C "$dir" diff --name-only --diff-filter=U

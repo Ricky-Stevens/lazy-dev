@@ -125,7 +125,7 @@ function runShell(c, { cwd, projectDir }) {
 		details: passed
 			? `exit=${exitCode}`
 			: `exit=${exitCode} (expected ${mustExit})\n--- stderr tail ---\n${stderr}\n--- stdout tail ---\n${stdoutTail}`,
-		failure_signature: passed ? null : cheapHash(`${c.id}|${exitCode}|${stderr}`),
+		failure_signature: passed ? null : cheapHash(`${c.id}|${exitCode}`),
 	};
 }
 

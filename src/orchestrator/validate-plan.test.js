@@ -168,11 +168,91 @@ describe("validatePlan", () => {
 		expect(r.ok).toBe(false);
 	});
 
-	test("accepts effort-variant agents (low, high)", () => {
-		for (const agent of ["code-small-low", "code-small-high", "code-big-low", "code-big-high"]) {
-			const r = validatePlan({ tasks: [baseTask({ agent })] });
+	test("accepts code-medium agent", () => {
+		const r = validatePlan({ tasks: [baseTask({ agent: "code-medium" })] });
+		expect(r.ok).toBe(true);
+	});
+
+	test("accepts valid effort values", () => {
+		for (const effort of ["low", "medium", "high", "max"]) {
+			const r = validatePlan({ tasks: [baseTask({ effort })] });
 			expect(r.ok).toBe(true);
 		}
+	});
+
+	test("rejects unknown effort values", () => {
+		const r = validatePlan({ tasks: [baseTask({ effort: "turbo" })] });
+		expect(r.ok).toBe(false);
+		expect(r.errors.join("\n")).toContain("unknown effort");
+	});
+
+	test("effort is optional (omitted is valid)", () => {
+		const r = validatePlan({ tasks: [baseTask()] });
+		expect(r.ok).toBe(true);
+	});
+
+	test("warns when effort exceeds model tier (haiku + high)", () => {
+		const r = validatePlan({ tasks: [baseTask({ agent: "code-small", effort: "high" })] });
+		expect(r.ok).toBe(true);
+		expect(r.warnings).toBeDefined();
+		expect(r.warnings.join("\n")).toContain("not effective");
+	});
+
+	test("warns when effort exceeds model tier (haiku + max)", () => {
+		const r = validatePlan({ tasks: [baseTask({ agent: "docs", effort: "max" })] });
+		expect(r.ok).toBe(true);
+		expect(r.warnings.join("\n")).toContain("not effective");
+	});
+
+	test("warns when effort exceeds model tier (sonnet + max)", () => {
+		const r = validatePlan({ tasks: [baseTask({ agent: "code-medium", effort: "max" })] });
+		expect(r.ok).toBe(true);
+		expect(r.warnings.join("\n")).toContain("not effective");
+	});
+
+	test("no warning for effort within model tier (sonnet + high)", () => {
+		const r = validatePlan({ tasks: [baseTask({ agent: "code-medium", effort: "high" })] });
+		expect(r.ok).toBe(true);
+		expect(r.warnings || []).toHaveLength(0);
+	});
+
+	test("no warning for effort within model tier (opus + max)", () => {
+		const r = validatePlan({ tasks: [baseTask({ agent: "code-big", effort: "max" })] });
+		expect(r.ok).toBe(true);
+		expect(r.warnings || []).toHaveLength(0);
+	});
+
+	test("no warning for haiku at low or medium", () => {
+		for (const effort of ["low", "medium"]) {
+			const r = validatePlan({ tasks: [baseTask({ agent: "code-small", effort })] });
+			expect(r.ok).toBe(true);
+			expect(r.warnings || []).toHaveLength(0);
+		}
+	});
+
+	test("rejects invalid regex in grep completion_criteria", () => {
+		const r = validatePlan({
+			tasks: [
+				baseTask({
+					completion_criteria: [{ id: "bad_regex", kind: "grep", pattern: "[invalid(", in_file: "a.js" }],
+				}),
+			],
+		});
+		expect(r.ok).toBe(false);
+		expect(r.errors.join("\n")).toContain("invalid regex");
+	});
+
+	test("accepts valid regex in grep completion_criteria", () => {
+		const r = validatePlan({
+			tasks: [
+				baseTask({
+					completion_criteria: [
+						{ id: "good_regex", kind: "grep", pattern: "export\\s+(default|const)", in_file: "a.js", must_match: true },
+					],
+				}),
+			],
+		});
+		expect(r.ok).toBe(true);
 	});
 
 	test("normalizes LLM field-name drift in completion_criteria", () => {

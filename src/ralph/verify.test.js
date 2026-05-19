@@ -51,6 +51,17 @@ describe("runVerifiers — shell", () => {
 		expect(r1.passed).toBe(false);
 		expect(r1.failure_signature).toBe(r2.failure_signature);
 	});
+
+	test("same exit code with different stderr produces identical signature (oscillation fix)", () => {
+		writeFileSync(join(cwd, "flaky.sh"), '#!/bin/bash\necho "error at line $RANDOM" >&2; exit 1');
+		execSync(`chmod +x ${join(cwd, "flaky.sh")}`);
+		const c = { id: "flaky", kind: "shell", cmd: join(cwd, "flaky.sh") };
+		const r1 = runVerifiers({ criteria: [c], cwd })[0];
+		const r2 = runVerifiers({ criteria: [c], cwd })[0];
+		expect(r1.passed).toBe(false);
+		expect(r2.passed).toBe(false);
+		expect(r1.failure_signature).toBe(r2.failure_signature);
+	});
 });
 
 describe("runVerifiers — grep", () => {

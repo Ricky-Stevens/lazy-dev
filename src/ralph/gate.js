@@ -48,10 +48,10 @@ const MAX_ITER_HARD_CAP = 10;
 // Per-run agents (planner, reviewer, wrangler) produce run-level artefacts,
 // not per-task work. Short-circuit so their SubagentStop events don't try to
 // resolve a task_id and end up mis-attributed.
-const PER_RUN_AGENT_PREFIXES = ["planner", "reviewer", "wrangler"];
+const PER_RUN_AGENTS = new Set(["planner", "reviewer", "wrangler"]);
 
 function isPerRunAgent(bareName) {
-	return PER_RUN_AGENT_PREFIXES.some((p) => bareName === p || bareName.startsWith(`${p}-`));
+	return PER_RUN_AGENTS.has(bareName);
 }
 
 main().catch((err) => {
@@ -331,12 +331,12 @@ function verifyPerRunOutput(projectDir, runId, bareAgentName, log) {
 	const runDir = join(projectDir, ".lazy-dev", "runs", runId);
 	let missing = null;
 
-	if (bareAgentName === "planner" || bareAgentName.startsWith("planner-")) {
+	if (bareAgentName === "planner") {
 		const need = [];
 		if (!existsSync(join(runDir, "master-spec.md"))) need.push("master-spec.md");
 		if (!existsSync(join(runDir, "tasks.json"))) need.push("tasks.json");
 		if (need.length) missing = need;
-	} else if (bareAgentName === "reviewer" || bareAgentName.startsWith("reviewer-")) {
+	} else if (bareAgentName === "reviewer") {
 		if (!existsSync(join(runDir, "review.md"))) missing = ["review.md"];
 	}
 

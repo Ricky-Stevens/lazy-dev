@@ -19,8 +19,8 @@ import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
 import { withRunLock } from "../mcp/_lock.js";
 import { requireSafeId } from "../mcp/_validation.js";
 
-function resolveAgentMeta(agentName) {
-	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.cwd();
+function resolveAgentMeta(agentName, fallbackRoot) {
+	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || fallbackRoot || process.cwd();
 	const agentFile = join(pluginRoot, "agents", `${agentName}.md`);
 	try {
 		const content = readFileSync(agentFile, "utf8");
@@ -90,8 +90,30 @@ export function dispatch({ runId, taskId, projectDir }) {
 				);
 			} catch (err) {
 				if (err.status === 3) {
-					throw new Error(
-						`cannot dispatch ${taskId}: merging dependency ${depId} produced conflicts — resolve first`,
+					const conflictFiles = (err.stdout || "")
+						.split("\n")
+						.map((l) => l.trim())
+						.filter(Boolean);
+					try {
+						execFileSync("git", ["merge", "--abort"], {
+							cwd: projectDir,
+							stdio: "ignore",
+							timeout: 10_000,
+						});
+					} catch {
+						try {
+							execFileSync("git", ["reset", "--hard", "HEAD"], {
+								cwd: projectDir,
+								stdio: "ignore",
+								timeout: 10_000,
+							});
+						} catch {}
+					}
+					throw Object.assign(
+						new Error(
+							`cannot dispatch ${taskId}: merging dependency ${depId} produced conflicts in: ${conflictFiles.join(", ")}. Resolve the conflicts in your main branch (between ${depId}'s changes and current state), then retry the dispatch.`,
+						),
+						{ dep_conflict: true, dep_id: depId, task_id: taskId, conflicted_files: conflictFiles },
 					);
 				}
 				throw new Error(`failed to merge dependency ${depId}: ${err.message}`);
@@ -144,12 +166,23 @@ export function dispatch({ runId, taskId, projectDir }) {
 
 		rmSync(join(taskDir, "RETRY"), { force: true });
 
-		const { model, effort } = resolveAgentMeta(task.agent);
+		const { model, effort: fileEffort } = resolveAgentMeta(task.agent, pluginRoot);
+		const effort = task.effort || fileEffort;
+		const effortHints = {
+			low: " — move fast, this is mechanical work.",
+			medium: ".",
+			high: " — reason carefully, check edge cases.",
+			max: " — this is architecturally critical. Take all the time you need.",
+		};
 		const effortLine = effort
-			? `\nEffort: ${effort}${effort === "low" ? " — move fast, this is mechanical work." : effort === "high" ? " — reason carefully, check edge cases." : effort === "max" ? " — this is architecturally critical. Take all the time you need." : "."}`
+			? `\nEffort: ${effort}${effortHints[effort] || "."}`
+			: "";
+		const envelope = readJsonSafe(envelopePath);
+		const retryLine = envelope?.reviewer_notes
+			? "\n\nThis is a RETRY. Your envelope contains reviewer_notes with specific feedback from the previous review. Read reviewer_notes before starting work."
 			: "";
 		const dispatchPrompt =
-			`Envelope: ${envelopePath}\nWorktree: ${worktreePath}${effortLine}` +
+			`Envelope: ${envelopePath}\nWorktree: ${worktreePath}${effortLine}${retryLine}` +
 			"\n\nRead your envelope and execute your system-prompt contract. Include task_id in the sentinel.";
 		return {
 			agent: task.agent,

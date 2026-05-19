@@ -48,6 +48,6 @@ describe("plannerDispatchTool", () => {
 			{ projectDir },
 		);
 		expect(result.effort).toBe("max");
-		expect(result.agent_namespaced).toContain("max");
+		expect(result.agent_namespaced).toBe("lazy-dev:planner");
 	});
 });

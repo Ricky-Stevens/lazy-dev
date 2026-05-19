@@ -14,7 +14,7 @@ export class IOError extends Error {
 
 // tmp+rename write. Atomic against concurrent reads on POSIX.
 export function atomicWrite(path, content) {
-	const tmp = `${path}.tmp`;
+	const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
 	writeFileSync(tmp, content);
 	renameSync(tmp, path);
 }

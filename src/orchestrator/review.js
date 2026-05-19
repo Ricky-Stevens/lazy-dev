@@ -17,9 +17,6 @@ import { atomicWrite, IOError, readJsonBounded } from "../mcp/_io.js";
 import { JSON_MAX_BYTES, requireSafeId } from "../mcp/_validation.js";
 import { parsePerTaskVerdicts } from "../shared/parse-verdicts.js";
 
-// Canonical effort ladder for the reviewer. Bare `lazy-dev:reviewer` is "high"
-// (current default); xhigh/max are variants. No 'medium' for reviewer — review
-// is a security/spec gate and we don't want to under-resource it.
 export const REVIEWER_EFFORTS = new Set(["high", "xhigh", "max"]);
 
 export function reviewBuild({ runId, projectDir, effort = "high" }) {
@@ -77,7 +74,7 @@ export function reviewBuild({ runId, projectDir, effort = "high" }) {
 		? ` This is a retry pass — read ${prevReviewPath} first, then verify each prior CHANGES_REQUESTED item is addressed. If a concern persists, restate it concisely; do not re-explain full context.`
 		: "";
 
-	const agentNamespaced = effort === "high" ? "lazy-dev:reviewer" : `lazy-dev:reviewer-${effort}`;
+	const agentNamespaced = "lazy-dev:reviewer";
 
 	return {
 		agent_namespaced: agentNamespaced,

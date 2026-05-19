@@ -167,6 +167,7 @@ describe("mergerEnvelope", () => {
 
 		const result = mergerEnvelope({ runId: "run-me", mergeId: "M-0001-T-0001", projectDir });
 		expect(result.agent_namespaced).toBe("lazy-dev:merger");
+		expect(result.model).toBe("sonnet");
 		expect(result.envelope_path).toContain("M-0001-T-0001");
 		expect(result.dispatch_prompt).toContain("Envelope:");
 	});

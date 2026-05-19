@@ -64,12 +64,8 @@ describe("planIsSimple", () => {
 		).toBe(false);
 	});
 
-	test("code-big-high also forces the gate", () => {
-		expect(planIsSimple([{ id: "T-0001", agent: "code-big-high" }])).toBe(false);
-	});
-
-	test("code-small-high does NOT force the gate (still narrow scope)", () => {
-		expect(planIsSimple([{ id: "T-0001", agent: "code-small-high" }])).toBe(true);
+	test("code-medium does NOT force the gate (low-risk agent)", () => {
+		expect(planIsSimple([{ id: "T-0001", agent: "code-medium" }])).toBe(true);
 	});
 
 	test("LAZY_DEV_APPROVAL=required forces the gate regardless", () => {

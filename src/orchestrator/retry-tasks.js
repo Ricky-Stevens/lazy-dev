@@ -53,13 +53,15 @@ export function retryTasks({ runId, taskIds, projectDir }) {
 
 			writeFileSync(
 				join(taskDir, "RETRY"),
-				JSON.stringify({ at: new Date().toISOString(), reason: "reviewer_changes_requested" }),
+				JSON.stringify({ at: new Date().toISOString(), reason: perTaskNotes[taskId] ? "reviewer_changes_requested" : "user_retry" }),
 			);
 			reset.push(taskId);
 		}
 
 		if (existsSync(reviewMdPath)) {
-			renameSync(reviewMdPath, join(runDir, "review-prev.md"));
+			try {
+				renameSync(reviewMdPath, join(runDir, "review-prev.md"));
+			} catch {}
 		}
 
 		const statusPath = join(runDir, "status.json");

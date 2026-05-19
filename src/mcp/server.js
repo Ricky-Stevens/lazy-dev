@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// server.js — lazy-dev MCP server. Stdio transport. Exposes 12 tools to
+// server.js — lazy-dev MCP server. Stdio transport. Exposes 13 tools to
 // Claude Code. Every tool input is schema-validated; handler-level guards
 // catch what the schema cannot (path traversal, size limits, metacharacters).
 //
@@ -21,9 +21,10 @@ import { pruneTool } from "./tools/prune.js";
 import { retryTasksTool } from "./tools/retry-tasks.js";
 import { reviewBuildTool } from "./tools/review-build.js";
 import { statusTool } from "./tools/status.js";
+import { updatePlanTool } from "./tools/update-plan.js";
 
 const SCHEMA_VERSION = 1;
-const SERVER_VERSION = "0.14.0";
+const SERVER_VERSION = "0.15.0";
 
 // Registry: each entry = { name, description, inputSchema, handler }.
 // Handlers receive validated params + a shared ctx (projectDir).
@@ -42,6 +43,7 @@ const tools = [
 	statusTool,
 	cancelRunTool,
 	pruneTool,
+	updatePlanTool,
 ];
 
 function ctx() {
@@ -89,7 +91,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 		const result = await tool.handler(args || {}, ctx());
 		return ok(result);
 	} catch (err) {
-		return fail(err.message || String(err));
+		return fail(err?.message || String(err));
 	}
 });
 

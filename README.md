@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/Ricky-Stevens/lazy-dev/graph/badge.svg)](https://codecov.io/gh/Ricky-Stevens/lazy-dev)
 [![Semgrep](https://img.shields.io/badge/security-semgrep-blue)](https://github.com/Ricky-Stevens/lazy-dev/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![version](https://img.shields.io/badge/version-0.14.0-blue)](https://github.com/Ricky-Stevens/lazy-dev/releases)
+[![version](https://img.shields.io/badge/version-0.15.0-blue)](https://github.com/Ricky-Stevens/lazy-dev/releases)
 [![Bun](https://img.shields.io/badge/runtime-Bun%201.3%2B-f9f1e1)](https://bun.sh)
 
 A Claude Code plugin for big tasks. You keep working in your main thread -- when something needs a plan, decomposition, parallel specialists, and a review, hand it to lazy-dev.
@@ -61,15 +61,13 @@ Each agent runs on the cheapest model that can do the job:
 
 | Model | Agents |
 |---|---|
-| Haiku | docs, format |
-| Sonnet | code-small (narrow edits, up to 3 files), research, merger, wrangler |
-| Opus | code-big (multi-file), planner, reviewer, debug |
+| Haiku | code-small (closely-scoped tasks), docs, format |
+| Sonnet | code-medium (most coding tasks -- the default), research, merger, wrangler |
+| Opus | code-big (complex multi-file only), planner, reviewer, debug |
 
-### Effort variants
+### Effort levels
 
-Model choice alone isn't enough -- the same Opus agent is overkill at max reasoning for a rename sweep, and underpowered at low effort for an API reshape. lazy-dev ships 19 agents across 5 effort levels (`low`, `medium`, `high`, `xhigh`, `max`). The planner picks the right variant per task based on complexity.
-
-A boilerplate propagation gets `code-big-low`. A tricky cross-cutting invariant gets `code-big-high`. You pay for reasoning where it matters.
+Model choice alone isn't enough -- the same agent is overkill at max reasoning for a rename sweep, and underpowered at low effort for an API reshape. The planner sets an `effort` field per task (`low`, `medium`, `high`, `max`) to fine-tune reasoning depth within each model tier. You pay for reasoning where it matters.
 
 ### Circuit breakers
 
@@ -89,7 +87,7 @@ Superpowers is a full framework that reshapes how you work with Claude across a 
 
 What lazy-dev specifically does differently:
 
-- **Effort variants.** 5 effort levels per agent role, not just model choice. The planner picks the variant per task based on complexity.
+- **Effort per task.** 4 effort levels (low, medium, high, max) set per task as a field, not encoded in agent names. The planner picks the level based on task complexity — you pay for reasoning where it matters.
 - **Ralph gate.** A verification hook with circuit breakers (same-failure-twice stop, same-diff-twice stop, max iterations) that kills oscillation automatically.
 - **Explicit invocation.** lazy-dev only activates when you call `/lazy-dev:run`. Nothing ambient, nothing persistent between runs.
 

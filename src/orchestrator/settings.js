@@ -22,9 +22,9 @@ export const DEFAULTS = Object.freeze({
 		direct_mode_tools: ["Read", "Grep", "Edit", "Write", "Bash"],
 	},
 	budget: {
+		// Advisory only — guides the planner's task sizing, never enforced at runtime.
 		per_task: { max_input_tokens: 100000, max_output_tokens: 20000 },
 		per_run: {},
-		window_guard: { enabled: true, protect_pct: 30 },
 		warn_at_pct: 70,
 	},
 	ralph: {
@@ -52,7 +52,7 @@ export const DEFAULTS = Object.freeze({
 	},
 	approval: {
 		auto_approve_max_tasks: 3,
-		require_gate_agents: ["code-big", "code-big-low", "code-big-high"],
+		require_gate_agents: ["code-big"],
 	},
 	safety: {
 		forbidden_paths_global: [

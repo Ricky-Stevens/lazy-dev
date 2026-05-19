@@ -61,9 +61,9 @@ describe("gate.js subprocess", () => {
 		expect(r.status).toBe(0);
 	});
 
-	test("exits 0 silently for per-run agent (reviewer variant)", () => {
+	test("exits 0 silently for per-run agent (reviewer)", () => {
 		const r = runGate({
-			agent_type: "lazy-dev:reviewer-xhigh",
+			agent_type: "lazy-dev:reviewer",
 			agent_id: "reviewer-1",
 			cwd: projectDir,
 			last_assistant_message: "",

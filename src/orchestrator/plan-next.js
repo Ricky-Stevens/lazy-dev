@@ -25,6 +25,7 @@ import { integrationTestPhase, mergePhase } from "./plan-next-merge.js";
 import { pruneCore } from "./prune.js";
 import { scheduleNext } from "./schedule.js";
 import { readRunConfig } from "./settings.js";
+import { buildGateSummary } from "./extract-plan-summary.js";
 import { validatePlan } from "./validate-plan.js";
 
 const DEFAULT_MAX_REVIEW_RETRIES = 1;
@@ -109,25 +110,13 @@ function planPhase(ctx) {
 	if (planIsSimple(tasks, cfg)) {
 		writeFileSync(
 			join(runDir, "approval.md"),
-			"Auto-approved (simple plan, no code-big, under threshold).\n",
+			"Auto-approved (simple plan, under threshold).\n",
 		);
 		advancePhase(ctx, "specialists");
 		return specialistsPhase(ctx);
 	}
 
-	const summary = {
-		run_id: runId,
-		master_spec_path: masterSpec,
-		tasks_json_path: tasksJson,
-		task_count: tasks.length,
-		tasks: tasks.map((t) => ({
-			id: t.id,
-			agent: t.agent,
-			title: t.title,
-			depends_on: t.depends_on || [],
-			allowed_paths: t.scope?.allowed_paths || [],
-		})),
-	};
+	const summary = buildGateSummary(runId, masterSpec, tasksJson, tasks);
 	advancePhase(ctx, "approve");
 	const gateResponse = { phase: "approve", action: "show_gate", summary };
 	if (result.warnings?.length) gateResponse.warnings = result.warnings;

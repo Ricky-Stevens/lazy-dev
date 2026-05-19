@@ -9,9 +9,9 @@
 import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const STALE_LOCK_MS = 5_000;
+const STALE_LOCK_MS = 120_000;
 const LOCK_RETRY_MS = 50;
-const LOCK_MAX_WAIT_MS = 5_000;
+const LOCK_MAX_WAIT_MS = 180_000;
 
 export class LockError extends Error {
 	constructor(message) {

@@ -5,8 +5,8 @@ export const plannerDispatchTool = {
 	name: "planner_dispatch",
 	description:
 		"Build the planner dispatch prompt. Call when plan_next emits action=dispatch_planner. " +
-		"`effort` picks the planner variant: 'medium' (routine <=3 files), 'high' (default, standard " +
-		"feature work), 'xhigh' (cross-subsystem), 'max' (architectural / migrations — expensive). " +
+		"`effort` controls reasoning depth: 'medium' (routine <=3 files), 'high' (default, standard " +
+		"feature work), 'xhigh' (cross-subsystem), 'max' (architectural / migrations -- expensive). " +
 		"Returns: { agent_namespaced, model, effort, brief_path, run_dir, dispatch_prompt }. Agent-dispatch " +
 		"using agent_namespaced as subagent_type, model as the model parameter, and dispatch_prompt as the prompt.",
 	inputSchema: {
@@ -22,7 +22,7 @@ export const plannerDispatchTool = {
 				type: "string",
 				enum: ["medium", "high", "xhigh", "max"],
 				description:
-					"Planner effort. Defaults to 'high'. Use 'medium' for routine small work; 'xhigh' for cross-subsystem; 'max' for architectural (costs scale steeply — justify the choice).",
+					"Planner effort. Defaults to 'high'. Use 'medium' for routine small work; 'xhigh' for cross-subsystem; 'max' for architectural (costs scale steeply -- justify the choice).",
 			},
 		},
 		required: ["run_id"],

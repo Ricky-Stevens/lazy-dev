@@ -146,7 +146,7 @@ describe("retryTasks", () => {
 			readFileSync(join(pd, ".lazy-dev", "runs", "run-r5", "tasks", "T-0001", "RETRY"), "utf8"),
 		);
 		expect(retry.at).toBeDefined();
-		expect(retry.reason).toBe("reviewer_changes_requested");
+		expect(retry.reason).toBe("user_retry");
 	});
 });
 

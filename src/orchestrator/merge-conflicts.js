@@ -108,6 +108,7 @@ export function mergerEnvelope({ runId, mergeId, projectDir }) {
 	if (!existsSync(envPath)) throw new Error(`merge envelope missing: ${envPath}`);
 	return {
 		agent_namespaced: "lazy-dev:merger",
+		model: "sonnet",
 		envelope_path: envPath,
 		dispatch_prompt: `Envelope: ${envPath}\n\nRead the envelope, read the master-spec, resolve the single conflicted file, end with the sentinel.`,
 	};

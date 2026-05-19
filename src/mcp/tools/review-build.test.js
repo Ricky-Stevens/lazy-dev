@@ -47,6 +47,6 @@ describe("reviewBuildTool", () => {
 			{ projectDir },
 		);
 		expect(result.effort).toBe("max");
-		expect(result.agent_namespaced).toContain("max");
+		expect(result.agent_namespaced).toBe("lazy-dev:reviewer");
 	});
 });
