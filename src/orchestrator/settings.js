@@ -51,7 +51,7 @@ export const DEFAULTS = Object.freeze({
 		test_cmd: "bun test",
 	},
 	approval: {
-		auto_approve_max_tasks: 3,
+		auto_approve_max_tasks: 2,
 		require_gate_agents: ["code-big"],
 	},
 	safety: {
@@ -64,6 +64,8 @@ export const DEFAULTS = Object.freeze({
 			"**/credentials/**",
 			"**/*.pem",
 			"**/*.key",
+			".claude/settings.json",
+			".lazy-dev/settings.json",
 		],
 		merge_safe_paths: [
 			"go.mod",
@@ -95,6 +97,11 @@ export function resolveSettings(projectDir = process.cwd()) {
 	eff = mergeDeep(eff, extract(readJsonSafe(userPath), "lazy-dev"));
 	eff = mergeDeep(eff, extract(readJsonSafe(projClaude), "lazy-dev"));
 	eff = mergeDeep(eff, readJsonSafe(projLocal) || {});
+
+	// require_gate_agents is additive — user config can add agents but never remove the defaults.
+	const defaultGate = DEFAULTS.approval.require_gate_agents;
+	const merged = eff.approval.require_gate_agents || [];
+	eff.approval.require_gate_agents = [...new Set([...defaultGate, ...merged])];
 
 	// Normalise parallelism hard cap
 	const pl = eff.parallelism;

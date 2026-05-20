@@ -67,6 +67,87 @@ function runOne(c, ctx) {
 	}
 }
 
+const SHELL_CMD_ALLOWED_PREFIXES = new Set([
+	"bun",
+	"bunx",
+	"npm",
+	"npx",
+	"pnpm",
+	"yarn",
+	"node",
+	"go",
+	"pytest",
+	"python",
+	"python3",
+	"cargo",
+	"make",
+	"tsc",
+	"biome",
+	"eslint",
+	"prettier",
+	"jest",
+	"vitest",
+	"mocha",
+	"grep",
+	"test",
+	"wc",
+	"diff",
+	"find",
+	"ls",
+	"cat",
+	"head",
+	"tail",
+	"true",
+	"false",
+	"echo",
+	"exit",
+	"dotnet",
+	"mvn",
+	"gradle",
+	"mix",
+	"rspec",
+	"phpunit",
+]);
+
+const SHELL_CMD_BLOCKED_PATTERNS = [
+	/\bcurl\b/,
+	/\bwget\b/,
+	/\bfetch\b/,
+	/\brm\s+-rf\b/,
+	/\brm\s+--no-preserve-root\b/,
+	/\bssh\b/,
+	/\bscp\b/,
+	/\brsync\b/,
+	/\bnc\b/,
+	/\bncat\b/,
+	/\bnetcat\b/,
+	/\bsocat\b/,
+	/\bchmod\b/,
+	/\bchown\b/,
+	/\beval\b/,
+	/\bsource\b/,
+	/\bbase64\b.*\|/,
+	/\|\s*sh\b/,
+	/\|\s*bash\b/,
+	/>\s*\//, // redirect to absolute path
+	/\$\(.*\bcat\b.*\/(\.ssh|\.env|\.gnupg|credentials|secrets)\b/,
+];
+
+function validateShellCmd(cmd) {
+	const tokens = cmd.trim().split(/\s+/).filter(Boolean);
+	if (tokens.length === 0) return "shell verifier cmd is empty";
+	const first = tokens[0].replace(/^.*\//, ""); // strip path prefix
+	if (!SHELL_CMD_ALLOWED_PREFIXES.has(first)) {
+		return `shell verifier command "${first}" is not in the allowed list. Use a .lazy-dev/verifiers/ override script for custom commands.`;
+	}
+	for (const pattern of SHELL_CMD_BLOCKED_PATTERNS) {
+		if (pattern.test(cmd)) {
+			return `shell verifier command matches blocked pattern ${pattern}. Use a .lazy-dev/verifiers/ override script for custom commands.`;
+		}
+	}
+	return null;
+}
+
 function runShell(c, { cwd, projectDir }) {
 	if (!c.cmd) {
 		return {
@@ -82,9 +163,16 @@ function runShell(c, { cwd, projectDir }) {
 		return { id: c.id, kind: c.kind, passed: false, details: "shell verifier cmd is empty" };
 	}
 
-	// User verifier override: if the cmd matches a script name in
-	// <project>/.lazy-dev/verifiers/<name>.sh, run that instead.
+	// Validate the command against the allowlist before executing.
+	// User overrides (.lazy-dev/verifiers/) bypass this check since they're
+	// user-authored scripts, not planner output.
 	const override = resolveVerifierOverride(c.cmd, projectDir);
+	if (!override) {
+		const rejection = validateShellCmd(c.cmd);
+		if (rejection) {
+			return { id: c.id, kind: c.kind, passed: false, details: rejection };
+		}
+	}
 	const execOpts = {
 		cwd,
 		encoding: "utf8",
@@ -97,8 +185,6 @@ function runShell(c, { cwd, projectDir }) {
 	let stderr = "";
 	let stdoutTail = "";
 	try {
-		// Trust boundary: c.cmd originates from the planner LLM via tasks.json.
-		// bash -c is required for shell syntax (pipes, negation, redirection).
 		const out = override
 			? execFileSync("bash", [override.script, ...override.args], execOpts)
 			: execFileSync("bash", ["-c", c.cmd], execOpts);

@@ -12,7 +12,7 @@
 // CLI:
 //   node src/orchestrator/plan-next.js <run-id>
 
-import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
@@ -151,6 +151,11 @@ function specialistsPhase(ctx) {
 
 	switch (next.kind) {
 		case "dispatch":
+			for (const id of next.ids) {
+				const taskDir = join(ctx.runDir, "tasks", id);
+				mkdirSync(taskDir, { recursive: true });
+				atomicWrite(join(taskDir, "DISPATCHING"), JSON.stringify({ at: new Date().toISOString() }));
+			}
 			return {
 				phase: "specialists",
 				action: "dispatch",
@@ -253,7 +258,19 @@ function reviewPhase(ctx) {
 	}
 
 	if (verdict === "BLOCK") {
-		return { phase: "error", action: "surface", detail: "reviewer blocked the run; see review.md" };
+		const perTask = parsePerTaskVerdicts(md);
+		const blocked = Object.entries(perTask)
+			.filter(([, v]) => v === "BLOCK" || v === "CHANGES_REQUESTED")
+			.map(([id]) => id);
+		return {
+			phase: "review",
+			action: "surface_review",
+			detail:
+				"Reviewer BLOCKED the run. Review review.md for details. " +
+				"You can retry specific tasks with retry_tasks, or cancel the run.",
+			tasks: blocked.length > 0 ? blocked : undefined,
+			review_path: reviewPath,
+		};
 	}
 
 	// Unparseable verdict — delete the broken review.md so re-dispatch produces a fresh one.
@@ -324,13 +341,41 @@ function buildStatuses(ctx, tasks) {
 	return out;
 }
 
+const STALE_RUNNING_MS = 15 * 60 * 1000; // 15 minutes
+
 function detectTaskStatus(ctx, taskId) {
 	const taskDir = join(ctx.runDir, "tasks", taskId);
-	// Check terminal markers first — they're the final state regardless of envelope.
 	if (existsSync(join(taskDir, "RETRY"))) return "pending";
-	if (existsSync(join(taskDir, "APPROVED"))) return "approved";
+	if (existsSync(join(taskDir, "APPROVED"))) {
+		try {
+			const marker = JSON.parse(readFileSync(join(taskDir, "APPROVED"), "utf8"));
+			if (!marker?.sentinel || !marker?.at) return "failed";
+		} catch {
+			return "failed";
+		}
+		return "approved";
+	}
 	if (existsSync(join(taskDir, "FAILED"))) return "failed";
-	if (existsSync(join(taskDir, "envelope.json"))) return "running";
+	const envPath = join(taskDir, "envelope.json");
+	if (existsSync(envPath)) {
+		try {
+			const env = readJsonSafe(envPath);
+			const dispatchedAt = env?.dispatched_at || env?.redispatched_at;
+			if (dispatchedAt && Date.now() - new Date(dispatchedAt).getTime() > STALE_RUNNING_MS) {
+				atomicWrite(
+					join(taskDir, "FAILED"),
+					JSON.stringify({
+						at: new Date().toISOString(),
+						reason: "stale_timeout",
+						details: `specialist has been running for >${STALE_RUNNING_MS / 60000}min without completing — presumed crashed`,
+					}),
+				);
+				return "failed";
+			}
+		} catch {}
+		return "running";
+	}
+	if (existsSync(join(taskDir, "DISPATCHING"))) return "running";
 	return "pending";
 }
 

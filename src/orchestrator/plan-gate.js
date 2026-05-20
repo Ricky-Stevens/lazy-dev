@@ -11,11 +11,11 @@
 //
 // Config shape (from .lazy-dev/settings.json's `approval` block):
 //   approval:
-//     auto_approve_max_tasks: 3          # default
+//     auto_approve_max_tasks: 2          # default
 //     require_gate_agents: [code-big]  # default
 //
-// Any task using an agent in require_gate_agents forces the gate. Any plan
-// larger than auto_approve_max_tasks forces the gate.
+// Any task using an agent in require_gate_agents forces the gate regardless
+// of count. Any plan larger than auto_approve_max_tasks forces the gate.
 
 export function planIsSimple(tasks, cfg = {}) {
 	const envOverride = process.env.LAZY_DEV_APPROVAL;
@@ -27,15 +27,10 @@ export function planIsSimple(tasks, cfg = {}) {
 		);
 	}
 	const threshold = cfg.approval || {};
-	const maxTasks = threshold.auto_approve_max_tasks ?? 3;
+	const maxTasks = threshold.auto_approve_max_tasks ?? 2;
 	const gateAgents = new Set(threshold.require_gate_agents || ["code-big"]);
 	if (!Array.isArray(tasks) || tasks.length === 0) return true;
-	// Any task using a gate-required agent forces the gate regardless of count.
 	if (tasks.some((t) => gateAgents.has(t.agent))) return false;
-	// Small plans auto-approve under the threshold.
 	if (tasks.length <= maxTasks) return true;
-	const lowRiskAgents = new Set(["code-small", "code-medium", "research", "docs", "format"]);
-	const allLowRisk = tasks.every((t) => lowRiskAgents.has(t.agent));
-	if (allLowRisk) return true;
 	return false;
 }

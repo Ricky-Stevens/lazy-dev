@@ -165,6 +165,7 @@ export function dispatch({ runId, taskId, projectDir }) {
 		}
 
 		rmSync(join(taskDir, "RETRY"), { force: true });
+		rmSync(join(taskDir, "DISPATCHING"), { force: true });
 
 		const { model, effort: fileEffort } = resolveAgentMeta(task.agent, pluginRoot);
 		const effort = task.effort || fileEffort;

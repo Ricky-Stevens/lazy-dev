@@ -54,25 +54,8 @@ describe("planPhase auto-approval", () => {
 		expect(existsSync(join(runDir, "approval.md"))).toBe(false);
 	});
 
-	test("plan with >3 low-risk tasks auto-approves", () => {
-		writePlan([
-			simpleTask("T-0001"),
-			simpleTask("T-0002"),
-			simpleTask("T-0003"),
-			simpleTask("T-0004"),
-		]);
-		const result = planNext({ runId, projectDir });
-		expect(result.action).toBe("dispatch");
-		expect(existsSync(join(runDir, "approval.md"))).toBe(true);
-	});
-
-	test("plan with >3 non-low-risk tasks emits show_gate", () => {
-		writePlan([
-			simpleTask("T-0001", "code-big"),
-			simpleTask("T-0002", "code-big"),
-			simpleTask("T-0003", "code-big"),
-			simpleTask("T-0004", "code-big"),
-		]);
+	test("plan with >2 tasks gates regardless of agent type", () => {
+		writePlan([simpleTask("T-0001"), simpleTask("T-0002"), simpleTask("T-0003")]);
 		const result = planNext({ runId, projectDir });
 		expect(result.action).toBe("show_gate");
 		expect(existsSync(join(runDir, "approval.md"))).toBe(false);
@@ -241,7 +224,10 @@ describe("specialistsPhase", () => {
 		writePlan([simpleTask("T-0001")]);
 		const taskDir = join(runDir, "tasks", "T-0001");
 		mkdirSync(taskDir, { recursive: true });
-		writeFileSync(join(taskDir, "APPROVED"), "{}");
+		writeFileSync(
+			join(taskDir, "APPROVED"),
+			JSON.stringify({ at: new Date().toISOString(), sentinel: { summary: "test" } }),
+		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("review");
 		expect(result.action).toBe("dispatch_reviewer");
@@ -315,13 +301,13 @@ describe("reviewPhase", () => {
 		expect(result.tasks).toBeInstanceOf(Array);
 	});
 
-	test("surfaces error on BLOCK verdict", () => {
+	test("BLOCK verdict surfaces review with retry option", () => {
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "review" }));
 		writeFileSync(join(runDir, "review.md"), "**Verdict:** BLOCK\nSecurity issue.\n");
 		const result = planNext({ runId, projectDir });
-		expect(result.phase).toBe("error");
-		expect(result.action).toBe("surface");
-		expect(result.detail).toContain("blocked");
+		expect(result.phase).toBe("review");
+		expect(result.action).toBe("surface_review");
+		expect(result.detail).toContain("BLOCKED");
 	});
 
 	test("surfaces review with retry option after max review retries", () => {

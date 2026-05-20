@@ -91,6 +91,19 @@ describe("resolveSettings", () => {
 		expect(r.routing.confirm_before).toEqual(["feature"]);
 	});
 
+	test("require_gate_agents is additive — project config cannot remove defaults", () => {
+		mkdirSync(join(projectDir, ".lazy-dev"), { recursive: true });
+		writeFileSync(
+			join(projectDir, ".lazy-dev", "settings.json"),
+			JSON.stringify({
+				approval: { require_gate_agents: ["debug"] },
+			}),
+		);
+		const r = resolveSettings(projectDir);
+		expect(r.approval.require_gate_agents).toContain("code-big");
+		expect(r.approval.require_gate_agents).toContain("debug");
+	});
+
 	test("plain-object over array-base leaves the array unchanged (#13)", () => {
 		// A misconfigured settings file that puts an object where an array is
 		// expected (e.g. forbidden_paths_global: { … }) must not corrupt the

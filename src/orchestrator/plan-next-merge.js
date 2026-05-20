@@ -37,6 +37,34 @@ export function mergePhase(ctx, { loadTasks, advancePhase }) {
 	for (const t of tasks) {
 		if (existsSync(join(runDir, "tasks", t.id, "MERGED"))) continue;
 		if (!existsSync(join(runDir, "tasks", t.id, "APPROVED"))) continue;
+		// Write MERGE_STARTED before the git op so a crash mid-merge is detectable.
+		const mergeStartedPath = join(runDir, "tasks", t.id, "MERGE_STARTED");
+		if (existsSync(mergeStartedPath)) {
+			// Previous merge attempt crashed. Check if the branch is already merged
+			// (ancestor of HEAD) to avoid re-merging and producing conflicts.
+			try {
+				execFileSync(
+					"git",
+					[
+						"merge-base",
+						"--is-ancestor",
+						`lazy-dev/${runId}/${t.id.replace(/[^A-Za-z0-9_-]/g, "_")}`,
+						"HEAD",
+					],
+					{ cwd: projectDir, stdio: "ignore", timeout: 10_000 },
+				);
+				// Branch is already an ancestor of HEAD — mark as merged and skip.
+				atomicWrite(
+					join(runDir, "tasks", t.id, "MERGED"),
+					JSON.stringify({ at: new Date().toISOString(), recovered: true }),
+				);
+				merged.push(t.id);
+				continue;
+			} catch {
+				// Not yet merged — proceed with the merge below.
+			}
+		}
+		atomicWrite(mergeStartedPath, JSON.stringify({ at: new Date().toISOString() }));
 		try {
 			execFileSync(
 				"bash",

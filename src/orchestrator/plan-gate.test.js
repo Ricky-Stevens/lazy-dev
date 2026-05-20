@@ -16,23 +16,21 @@ describe("planIsSimple", () => {
 		expect(planIsSimple([{ id: "T-0001", agent: "code-small" }])).toBe(true);
 	});
 
-	test("three code-small tasks is simple (at threshold)", () => {
+	test("two code-small tasks is simple (at threshold)", () => {
 		const tasks = [
 			{ id: "T-0001", agent: "code-small" },
 			{ id: "T-0002", agent: "code-small" },
-			{ id: "T-0003", agent: "code-small" },
 		];
 		expect(planIsSimple(tasks)).toBe(true);
 	});
 
-	test("four code-small tasks is still simple (low-risk agents auto-approve)", () => {
+	test("three code-small tasks is NOT simple (over threshold)", () => {
 		const tasks = [
 			{ id: "T-0001", agent: "code-small" },
 			{ id: "T-0002", agent: "code-small" },
 			{ id: "T-0003", agent: "code-small" },
-			{ id: "T-0004", agent: "code-small" },
 		];
-		expect(planIsSimple(tasks)).toBe(true);
+		expect(planIsSimple(tasks)).toBe(false);
 	});
 
 	test("four code-big tasks over threshold is NOT simple", () => {
@@ -64,8 +62,17 @@ describe("planIsSimple", () => {
 		).toBe(false);
 	});
 
-	test("code-medium does NOT force the gate (low-risk agent)", () => {
+	test("single code-medium task is simple (under threshold)", () => {
 		expect(planIsSimple([{ id: "T-0001", agent: "code-medium" }])).toBe(true);
+	});
+
+	test("three code-medium tasks gates (over threshold, no low-risk bypass)", () => {
+		const tasks = [
+			{ id: "T-0001", agent: "code-medium" },
+			{ id: "T-0002", agent: "code-medium" },
+			{ id: "T-0003", agent: "code-medium" },
+		];
+		expect(planIsSimple(tasks)).toBe(false);
 	});
 
 	test("LAZY_DEV_APPROVAL=required forces the gate regardless", () => {
