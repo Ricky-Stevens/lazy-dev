@@ -206,3 +206,147 @@ describe("gate.js subprocess", () => {
 		}
 	});
 });
+
+describe("gate autoCommit — scoped staging", () => {
+	function setupWorktree(taskId, branchSuffix, envelopeOverrides = {}) {
+		const taskDir = join(runDir, "tasks", taskId);
+		mkdirSync(taskDir, { recursive: true });
+		const branch = `lazy-dev/test-run-001/${branchSuffix}`;
+		const wtDir = join(projectDir, ".lazy-dev", "worktrees", runId, `${branchSuffix}-aaaaaa`);
+		mkdirSync(join(projectDir, ".lazy-dev", "worktrees", runId), { recursive: true });
+		execFileSync("git", ["-C", projectDir, "worktree", "add", "-b", branch, wtDir, "HEAD"], {
+			stdio: "ignore",
+		});
+		writeFileSync(
+			join(taskDir, "envelope.json"),
+			JSON.stringify({
+				id: taskId,
+				run_id: runId,
+				task_id: taskId,
+				scope: { allowed_paths: ["src/*.js"] },
+				completion_criteria: [{ id: "f", kind: "file_exists", path: "src/app.js" }],
+				worktree_path: wtDir,
+				worktree_branch: branch,
+				budget: { max_iter: 2 },
+				...envelopeOverrides,
+			}),
+		);
+		return { taskDir, wtDir, branch };
+	}
+
+	function cleanupWorktree(wtDir, branch) {
+		rmSync(wtDir, { recursive: true, force: true });
+		try {
+			execFileSync("git", ["-C", projectDir, "worktree", "prune"], { stdio: "ignore" });
+			execFileSync("git", ["-C", projectDir, "branch", "-D", branch], { stdio: "ignore" });
+		} catch {}
+	}
+
+	function fireSentinel(taskId) {
+		const sentinel = `---COMPLETED---\n${JSON.stringify({ task_id: taskId, summary: "done" })}\n---END---`;
+		return runGate({
+			agent_type: "lazy-dev:code-small",
+			agent_id: `cs-${taskId}`,
+			cwd: projectDir,
+			last_assistant_message: sentinel,
+		});
+	}
+
+	test("auto-commit does not stage untracked files outside allowed_paths", () => {
+		const { taskDir, wtDir, branch } = setupWorktree("T-AUTO", "T-AUTO");
+		try {
+			mkdirSync(join(wtDir, "src"), { recursive: true });
+			writeFileSync(join(wtDir, "src", "app.js"), "export const x = 1;\n");
+			mkdirSync(join(wtDir, ".serena"), { recursive: true });
+			writeFileSync(join(wtDir, ".serena", "project.yml"), "name: test\n");
+			mkdirSync(join(wtDir, ".some-tool"), { recursive: true });
+			writeFileSync(join(wtDir, ".some-tool", "cache.json"), "{}");
+
+			const r = fireSentinel("T-AUTO");
+			expect(r.status).toBe(0);
+
+			const logOut = execFileSync("git", ["-C", wtDir, "log", "--oneline", "-1"], {
+				encoding: "utf8",
+			}).trim();
+			expect(logOut).toContain("auto-commit");
+
+			const committed = execFileSync("git", ["-C", wtDir, "diff", "--name-only", "HEAD~1..HEAD"], {
+				encoding: "utf8",
+			}).trim();
+			expect(committed).toContain("src/app.js");
+			expect(committed).not.toContain(".serena");
+			expect(committed).not.toContain(".some-tool");
+
+			expect(existsSync(join(taskDir, "APPROVED"))).toBe(true);
+		} finally {
+			cleanupWorktree(wtDir, branch);
+		}
+	});
+
+	test("no commit when only tool artifacts exist (no in-scope changes)", () => {
+		const { taskDir, wtDir, branch } = setupWorktree("T-TOOLONLY", "T-TOOLONLY");
+		try {
+			mkdirSync(join(wtDir, ".serena"), { recursive: true });
+			writeFileSync(join(wtDir, ".serena", "project.yml"), "name: test\n");
+
+			const r = fireSentinel("T-TOOLONLY");
+			expect(r.status).toBe(0);
+
+			const logOut = execFileSync("git", ["-C", wtDir, "log", "--oneline", "-1"], {
+				encoding: "utf8",
+			}).trim();
+			expect(logOut).not.toContain("auto-commit");
+			expect(logOut).toContain("init");
+		} finally {
+			cleanupWorktree(wtDir, branch);
+		}
+	});
+
+	test("empty allowedPaths falls back to git add -A", () => {
+		const { taskDir, wtDir, branch } = setupWorktree("T-EMPTY", "T-EMPTY", {
+			scope: { allowed_paths: [] },
+			completion_criteria: [{ id: "f", kind: "file_exists", path: "newfile.txt" }],
+		});
+		try {
+			writeFileSync(join(wtDir, "newfile.txt"), "hello\n");
+			mkdirSync(join(wtDir, ".tool"), { recursive: true });
+			writeFileSync(join(wtDir, ".tool", "cache"), "{}");
+
+			const r = fireSentinel("T-EMPTY");
+			expect(r.status).toBe(0);
+
+			const committed = execFileSync("git", ["-C", wtDir, "diff", "--name-only", "HEAD~1..HEAD"], {
+				encoding: "utf8",
+			}).trim();
+			expect(committed).toContain("newfile.txt");
+			expect(committed).toContain(".tool/cache");
+		} finally {
+			cleanupWorktree(wtDir, branch);
+		}
+	});
+
+	test("auto-cleans out-of-scope files committed by the specialist", () => {
+		const { taskDir, wtDir, branch } = setupWorktree("T-CLEAN", "T-CLEAN");
+		try {
+			mkdirSync(join(wtDir, "src"), { recursive: true });
+			writeFileSync(join(wtDir, "src", "app.js"), "export const x = 1;\n");
+			mkdirSync(join(wtDir, ".serena"), { recursive: true });
+			writeFileSync(join(wtDir, ".serena", "project.yml"), "name: test\n");
+
+			// Specialist commits everything (including out-of-scope .serena/)
+			execFileSync("git", ["-C", wtDir, "add", "-A"], { stdio: "ignore" });
+			execFileSync("git", ["-C", wtDir, "commit", "-m", "specialist work"], {
+				stdio: "ignore",
+			});
+
+			const r = fireSentinel("T-CLEAN");
+			expect(r.status).toBe(0);
+
+			// Task should be approved — gate auto-cleaned the .serena files.
+			expect(existsSync(join(taskDir, "APPROVED"))).toBe(true);
+			expect(existsSync(join(taskDir, "FAILED"))).toBe(false);
+		} finally {
+			cleanupWorktree(wtDir, branch);
+		}
+	});
+});

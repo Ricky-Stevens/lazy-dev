@@ -59,9 +59,16 @@ export function reviewBuild({ runId, projectDir, effort = "high" }) {
 
 	const prevReviewPath = join(runDir, "review-prev.md");
 	const isRetry = existsSync(prevReviewPath);
+	const briefPath = join(runDir, "brief.md");
+	if (!existsSync(briefPath)) {
+		throw new Error(
+			`brief.md missing at ${briefPath} — cannot review without the user's original input`,
+		);
+	}
 
 	const envelope = {
 		run_id: runId,
+		brief: briefPath,
 		master_spec: join(runDir, "master-spec.md"),
 		tasks_json: join(runDir, "tasks.json"),
 		tasks: tasksWithDiffs,
@@ -85,7 +92,7 @@ export function reviewBuild({ runId, projectDir, effort = "high" }) {
 			`Envelope: ${envPath}\n\n` +
 			"The user has explicitly requested you create this file:\n" +
 			`  ${join(projectDir, ".lazy-dev", "runs", runId, "review.md")}\n\n` +
-			`Read the envelope, the master-spec, and each task's diff_patch. Follow the reviewer rubric. ` +
+			`Read the envelope, the brief, the master-spec, and each task's diff_patch. Follow the reviewer rubric. ` +
 			`Prefer Bash (cat > path << 'HEREDOC') for writing review.md. End with the sentinel.${retryLine}`,
 		retry: isRetry,
 	};

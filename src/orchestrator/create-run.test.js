@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -16,6 +16,15 @@ beforeAll(() => {
 afterAll(() => {
 	rmSync(tmpDir, { recursive: true, force: true });
 });
+
+function initGitRepo(dir) {
+	execFileSync("git", ["init"], { cwd: dir, stdio: "ignore" });
+	execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: dir, stdio: "ignore" });
+	execFileSync("git", ["config", "user.name", "Test"], { cwd: dir, stdio: "ignore" });
+	writeFileSync(join(dir, "README.md"), "init\n");
+	execFileSync("git", ["add", "."], { cwd: dir, stdio: "ignore" });
+	execFileSync("git", ["commit", "-m", "init"], { cwd: dir, stdio: "ignore" });
+}
 
 describe("createRun", () => {
 	test("creates run dir with brief.md and status.json", () => {
@@ -62,6 +71,31 @@ describe("createRun", () => {
 		const a = createRun({ brief: "a", projectDir: tmpDir });
 		const b = createRun({ brief: "b", projectDir: tmpDir });
 		expect(a.run_id).not.toBe(b.run_id);
+	});
+
+	test("sets needs_git_init when projectDir is not a git repo", () => {
+		const noGitDir = mkdtempSync(join(tmpdir(), "create-run-no-git-"));
+		try {
+			const result = createRun({ brief: "test", projectDir: noGitDir });
+			expect(result.warning).toContain("not a git repository");
+			const status = JSON.parse(readFileSync(join(result.run_dir, "status.json"), "utf8"));
+			expect(status.needs_git_init).toBe(true);
+		} finally {
+			rmSync(noGitDir, { recursive: true, force: true });
+		}
+	});
+
+	test("does not set needs_git_init when projectDir is a git repo", () => {
+		const gitDir = mkdtempSync(join(tmpdir(), "create-run-git-"));
+		try {
+			initGitRepo(gitDir);
+			const result = createRun({ brief: "test", projectDir: gitDir });
+			expect(result.warning).toBeUndefined();
+			const status = JSON.parse(readFileSync(join(result.run_dir, "status.json"), "utf8"));
+			expect(status.needs_git_init).toBeUndefined();
+		} finally {
+			rmSync(gitDir, { recursive: true, force: true });
+		}
 	});
 });
 

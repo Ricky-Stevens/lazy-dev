@@ -29,6 +29,7 @@ describe("reviewBuildTool", () => {
 			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
 		);
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
+		writeFileSync(join(runDir, "brief.md"), "test\n");
 
 		const result = await reviewBuildTool.handler({ run_id: "run-rb" }, { projectDir });
 		expect(result.agent_namespaced).toContain("reviewer");
@@ -41,6 +42,7 @@ describe("reviewBuildTool", () => {
 		mkdirSync(runDir, { recursive: true });
 		writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks: [] }));
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
+		writeFileSync(join(runDir, "brief.md"), "test\n");
 
 		const result = await reviewBuildTool.handler(
 			{ run_id: "run-rb2", effort: "max" },

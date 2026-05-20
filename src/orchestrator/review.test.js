@@ -22,6 +22,7 @@ function setupReviewRun(pd, runId, tasks, opts = {}) {
 	mkdirSync(runDir, { recursive: true });
 	writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks }));
 	writeFileSync(join(runDir, "status.json"), JSON.stringify({ run_id: runId, phase: "review" }));
+	writeFileSync(join(runDir, "brief.md"), opts.brief || "Test brief\n");
 	if (opts.previousReview) {
 		writeFileSync(join(runDir, "review-prev.md"), opts.previousReview);
 	}
@@ -112,6 +113,7 @@ describe("reviewBuild", () => {
 		const pd = join(tmpDir, "rb-badsent");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-badsent");
 		mkdirSync(runDir, { recursive: true });
+		writeFileSync(join(runDir, "brief.md"), "test\n");
 		writeFileSync(
 			join(runDir, "tasks.json"),
 			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
@@ -130,6 +132,7 @@ describe("reviewBuild", () => {
 		const pd = join(tmpDir, "rb-nosent");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-nosent");
 		mkdirSync(runDir, { recursive: true });
+		writeFileSync(join(runDir, "brief.md"), "test\n");
 		writeFileSync(
 			join(runDir, "tasks.json"),
 			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
@@ -174,6 +177,25 @@ describe("reviewBuild", () => {
 
 	test("validates run_id", () => {
 		expect(() => reviewBuild({ runId: "../bad", projectDir: tmpDir })).toThrow();
+	});
+
+	test("includes brief path in review envelope", () => {
+		const pd = join(tmpDir, "rb-brief");
+		const runDir = setupReviewRun(pd, "run-brief", [{ id: "T-0001", agent: "code-small" }]);
+		writeFileSync(join(runDir, "brief.md"), "Build a rate limiter with sliding window.\n");
+
+		const result = reviewBuild({ runId: "run-brief", projectDir: pd });
+		const envelope = JSON.parse(readFileSync(result.envelope_path, "utf8"));
+		expect(envelope.brief).toContain("brief.md");
+		expect(result.dispatch_prompt).toContain("the brief");
+	});
+
+	test("throws when brief.md is missing", () => {
+		const pd = join(tmpDir, "rb-nobrief");
+		const runDir = setupReviewRun(pd, "run-nobrief", [{ id: "T-0001", agent: "code-small" }]);
+		rmSync(join(runDir, "brief.md"), { force: true });
+
+		expect(() => reviewBuild({ runId: "run-nobrief", projectDir: pd })).toThrow("brief.md missing");
 	});
 });
 
@@ -238,6 +260,7 @@ describe("reviewBuild — worktree handling", () => {
 		const pd = join(tmpDir, "rb-wt1");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-wt1");
 		mkdirSync(runDir, { recursive: true });
+		writeFileSync(join(runDir, "brief.md"), "test\n");
 		writeFileSync(
 			join(runDir, "tasks.json"),
 			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
@@ -260,6 +283,7 @@ describe("reviewBuild — worktree handling", () => {
 		const pd = join(tmpDir, "rb-wt2");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-wt2");
 		mkdirSync(runDir, { recursive: true });
+		writeFileSync(join(runDir, "brief.md"), "test\n");
 		writeFileSync(
 			join(runDir, "tasks.json"),
 			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
@@ -289,6 +313,7 @@ describe("reviewBuild — worktree handling", () => {
 		const pd = join(tmpDir, "rb-nwt");
 		const runDir = join(pd, ".lazy-dev", "runs", "run-nwt");
 		mkdirSync(runDir, { recursive: true });
+		writeFileSync(join(runDir, "brief.md"), "test\n");
 		writeFileSync(
 			join(runDir, "tasks.json"),
 			JSON.stringify({ tasks: [{ id: "T-0001", agent: "code-small" }] }),
@@ -308,6 +333,7 @@ describe("review.js CLI", () => {
 		mkdirSync(runDir, { recursive: true });
 		writeFileSync(join(runDir, "tasks.json"), JSON.stringify({ tasks: [] }));
 		writeFileSync(join(runDir, "status.json"), JSON.stringify({ phase: "review" }));
+		writeFileSync(join(runDir, "brief.md"), "test\n");
 
 		const result = spawnSync("node", [CLI_PATH, "build", "run-cli"], {
 			encoding: "utf8",

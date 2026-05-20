@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // create-run.js
 // Creates a new lazy-dev run directory atomically. Single owner of the
 // status.json schema and run-dir layout.
@@ -11,11 +12,25 @@
 //
 // Output: { ok, run_id, run_dir } or { ok: false, detail }.
 
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWrite } from "../mcp/_io.js";
 import { sanitiseBrief } from "../mcp/_validation.js";
+
+function isGitRepo(dir) {
+	try {
+		execFileSync("git", ["rev-parse", "--git-dir"], {
+			cwd: dir,
+			stdio: ["ignore", "pipe", "pipe"],
+			timeout: 5_000,
+		});
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 // Core: pure function, used by MCP handler + CLI wrapper.
 export function createRun({ brief, projectDir }) {
@@ -24,13 +39,20 @@ export function createRun({ brief, projectDir }) {
 	const runDir = join(projectDir, ".lazy-dev", "runs", runId);
 	mkdirSync(runDir, { recursive: true });
 
-	atomicWrite(join(runDir, "brief.md"), `${cleanBrief.trim()}\n`);
-	atomicWrite(
-		join(runDir, "status.json"),
-		`${JSON.stringify({ run_id: runId, phase: "plan" }, null, 2)}\n`,
-	);
+	const needsGitInit = !isGitRepo(projectDir);
+	const status = { run_id: runId, phase: "plan" };
+	if (needsGitInit) status.needs_git_init = true;
 
-	return { run_id: runId, run_dir: runDir };
+	atomicWrite(join(runDir, "brief.md"), `${cleanBrief.trim()}\n`);
+	atomicWrite(join(runDir, "status.json"), `${JSON.stringify(status, null, 2)}\n`);
+
+	const result = { run_id: runId, run_dir: runDir };
+	if (needsGitInit) {
+		result.warning =
+			"Project directory is not a git repository. The planner will prepend a git-init " +
+			"scaffolding task so that worktrees work for subsequent tasks.";
+	}
+	return result;
 }
 
 function generateRunId() {

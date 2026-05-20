@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { planNext } from "./plan-next.js";
@@ -293,12 +301,29 @@ describe("reviewPhase", () => {
 		writePlan([simpleTask("T-0001")]);
 		writeFileSync(
 			join(runDir, "review.md"),
-			"**Verdict:** CHANGES_REQUESTED\n\n## T-0001\n\n**Verdict:** CHANGES_REQUESTED\nFix X.\n",
+			"**Verdict:** CHANGES_REQUESTED\n\n## T-0001 (code-small) -- CHANGES_REQUESTED\nFix X.\n",
 		);
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("review");
 		expect(result.action).toBe("auto_retry");
 		expect(result.tasks).toBeInstanceOf(Array);
+	});
+
+	test("surfaces review directly when CHANGES_REQUESTED has no per-task failures (brief compliance gap)", () => {
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "review", review_pass: 0 }),
+		);
+		writePlan([simpleTask("T-0001")]);
+		writeFileSync(
+			join(runDir, "review.md"),
+			"**Verdict:** CHANGES_REQUESTED\n\n## T-0001 (code-small) -- PASS\n- OK\n\n## Brief Compliance\n| Req | Status |\n|---|---|\n| Rate limiter | MISSING |\n",
+		);
+		const result = planNext({ runId, projectDir });
+		expect(result.phase).toBe("review");
+		expect(result.action).toBe("surface_review");
+		expect(result.detail).toContain("brief compliance");
+		expect(result.tasks).toBeUndefined();
 	});
 
 	test("BLOCK verdict surfaces review with retry option", () => {
@@ -420,5 +445,136 @@ describe("planNext — budget warnings", () => {
 		const result = planNext({ runId, projectDir });
 		expect(result.phase).toBe("specialists");
 		expect(result.warning).toContain("exceeded budget");
+	});
+});
+
+describe("planPhase — sibling plan reuse", () => {
+	test("reuses plan from a cancelled sibling run", () => {
+		const siblingId = "2026-04-18T00-00-00Z-sibling";
+		const siblingDir = join(projectDir, ".lazy-dev", "runs", siblingId);
+		mkdirSync(siblingDir, { recursive: true });
+		writeFileSync(
+			join(siblingDir, "status.json"),
+			JSON.stringify({ run_id: siblingId, phase: "cancelled" }),
+		);
+		writeFileSync(join(siblingDir, "master-spec.md"), "# Reused spec");
+		const siblingPlan = { tasks: [simpleTask("T-0001"), simpleTask("T-0002")] };
+		writeFileSync(join(siblingDir, "tasks.json"), JSON.stringify(siblingPlan));
+
+		const result = planNext({ runId, projectDir });
+		expect(existsSync(join(runDir, "master-spec.md"))).toBe(true);
+		expect(existsSync(join(runDir, "tasks.json"))).toBe(true);
+		expect(readFileSync(join(runDir, "master-spec.md"), "utf8")).toBe("# Reused spec");
+		expect(result.phase).toBe("specialists");
+	});
+
+	test("does not reuse plan from an active (specialists phase) sibling", () => {
+		const siblingId = "2026-04-18T00-00-00Z-active";
+		const siblingDir = join(projectDir, ".lazy-dev", "runs", siblingId);
+		mkdirSync(siblingDir, { recursive: true });
+		writeFileSync(
+			join(siblingDir, "status.json"),
+			JSON.stringify({ run_id: siblingId, phase: "specialists" }),
+		);
+		writeFileSync(join(siblingDir, "master-spec.md"), "# Active spec");
+		writeFileSync(
+			join(siblingDir, "tasks.json"),
+			JSON.stringify({ tasks: [simpleTask("T-0001")] }),
+		);
+
+		const result = planNext({ runId, projectDir });
+		expect(result.action).toBe("dispatch_planner");
+	});
+
+	test("does not reuse plan from sibling with empty tasks", () => {
+		const siblingId = "2026-04-18T00-00-00Z-empty";
+		const siblingDir = join(projectDir, ".lazy-dev", "runs", siblingId);
+		mkdirSync(siblingDir, { recursive: true });
+		writeFileSync(
+			join(siblingDir, "status.json"),
+			JSON.stringify({ run_id: siblingId, phase: "cancelled" }),
+		);
+		writeFileSync(join(siblingDir, "master-spec.md"), "# Empty spec");
+		writeFileSync(join(siblingDir, "tasks.json"), JSON.stringify({ tasks: [] }));
+
+		const result = planNext({ runId, projectDir });
+		expect(result.action).toBe("dispatch_planner");
+	});
+
+	test("does not reuse plan from a sibling in approve phase", () => {
+		const siblingId = "2026-04-18T00-00-00Z-approve";
+		const siblingDir = join(projectDir, ".lazy-dev", "runs", siblingId);
+		mkdirSync(siblingDir, { recursive: true });
+		writeFileSync(
+			join(siblingDir, "status.json"),
+			JSON.stringify({ run_id: siblingId, phase: "approve" }),
+		);
+		writeFileSync(join(siblingDir, "master-spec.md"), "# Approve spec");
+		writeFileSync(
+			join(siblingDir, "tasks.json"),
+			JSON.stringify({ tasks: [simpleTask("T-0001")] }),
+		);
+
+		const result = planNext({ runId, projectDir });
+		expect(result.action).toBe("dispatch_planner");
+	});
+
+	test("skips symlinked sibling directories", () => {
+		const realDir = mkdtempSync(join(tmpdir(), "lazy-dev-symlink-target-"));
+		mkdirSync(join(realDir, "inner"), { recursive: true });
+		writeFileSync(join(realDir, "inner", "status.json"), JSON.stringify({ phase: "cancelled" }));
+		writeFileSync(join(realDir, "inner", "master-spec.md"), "# Symlinked spec");
+		writeFileSync(
+			join(realDir, "inner", "tasks.json"),
+			JSON.stringify({ tasks: [simpleTask("T-0001")] }),
+		);
+
+		const linkPath = join(projectDir, ".lazy-dev", "runs", "2026-04-18T00-00-00Z-linked");
+		symlinkSync(join(realDir, "inner"), linkPath);
+
+		const result = planNext({ runId, projectDir });
+		expect(result.action).toBe("dispatch_planner");
+		rmSync(realDir, { recursive: true, force: true });
+	});
+
+	test("surfaces reused_from in gate response", () => {
+		const siblingId = "2026-04-18T00-00-00Z-reuse-signal";
+		const siblingDir = join(projectDir, ".lazy-dev", "runs", siblingId);
+		mkdirSync(siblingDir, { recursive: true });
+		writeFileSync(
+			join(siblingDir, "status.json"),
+			JSON.stringify({ run_id: siblingId, phase: "cancelled" }),
+		);
+		const bigTask = { ...simpleTask("T-0001", "code-big"), effort: "high", depends_on: [] };
+		const dep = { ...simpleTask("T-0002"), depends_on: ["T-0001"] };
+		const thirdTask = { ...simpleTask("T-0003"), depends_on: ["T-0001"] };
+		writeFileSync(join(siblingDir, "master-spec.md"), "# Reuse signal spec\n\n## Problem\nTest\n");
+		writeFileSync(
+			join(siblingDir, "tasks.json"),
+			JSON.stringify({ tasks: [bigTask, dep, thirdTask] }),
+		);
+
+		const result = planNext({ runId, projectDir });
+		expect(result.phase).toBe("approve");
+		expect(result.reused_from).toBe(siblingId);
+	});
+
+	test("prefers most recent sibling when multiple are available", () => {
+		const oldId = "2026-04-17T00-00-00Z-old";
+		const newId = "2026-04-18T00-00-00Z-new";
+		for (const [id, spec] of [
+			[oldId, "# Old spec"],
+			[newId, "# New spec"],
+		]) {
+			const d = join(projectDir, ".lazy-dev", "runs", id);
+			mkdirSync(d, { recursive: true });
+			writeFileSync(d + "/status.json", JSON.stringify({ run_id: id, phase: "cancelled" }));
+			writeFileSync(d + "/master-spec.md", spec);
+			writeFileSync(d + "/tasks.json", JSON.stringify({ tasks: [simpleTask("T-0001")] }));
+		}
+
+		planNext({ runId, projectDir });
+		const spec = readFileSync(join(runDir, "master-spec.md"), "utf8");
+		expect(spec).toBe("# New spec");
 	});
 });

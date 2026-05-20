@@ -24,7 +24,7 @@ import { statusTool } from "./tools/status.js";
 import { updatePlanTool } from "./tools/update-plan.js";
 
 const SCHEMA_VERSION = 1;
-const SERVER_VERSION = "0.16.0";
+const SERVER_VERSION = "0.17.0";
 
 // Registry: each entry = { name, description, inputSchema, handler }.
 // Handlers receive validated params + a shared ctx (projectDir).

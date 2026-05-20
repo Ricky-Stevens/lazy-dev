@@ -15,6 +15,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
 import { requireSafeId } from "../mcp/_validation.js";
 
 export const PLANNER_EFFORTS = new Set(["medium", "high", "xhigh", "max"]);
@@ -33,6 +34,26 @@ export function plannerDispatch({ runId, projectDir, effort = "high" }) {
 
 	const agentNamespaced = "lazy-dev:planner";
 
+	const statusPath = join(runDir, "status.json");
+	const status = readJsonSafe(statusPath) || {};
+	let gitInitBlock = "";
+	if (status.needs_git_init) {
+		delete status.needs_git_init;
+		atomicWrite(statusPath, JSON.stringify(status, null, 2));
+		gitInitBlock =
+			"\n\nIMPORTANT — GIT INIT REQUIRED:\n" +
+			"The project directory is NOT a git repository. Worktrees (used for all specialist tasks) " +
+			"require git. You MUST make T-0001 a git-init scaffolding task with these properties:\n" +
+			'  - "git_init": true  (flag on the task object, tells the dispatcher to skip worktree creation)\n' +
+			'  - agent: "code-small", effort: "low"\n' +
+			"  - goal: initialize git repo and make an initial commit of existing files\n" +
+			"  - completion_criteria: a shell check that `git rev-parse --git-dir` exits 0, " +
+			"and a shell check that `git log --oneline -1` exits 0\n" +
+			'  - scope.allowed_paths: [".gitignore"]\n' +
+			"  - DO NOT include a diff_scope criterion (there is no git history to diff against)\n" +
+			"  - All other tasks MUST depend on T-0001.\n";
+	}
+
 	return {
 		agent_namespaced: agentNamespaced,
 		model: "opus",
@@ -45,7 +66,8 @@ export function plannerDispatch({ runId, projectDir, effort = "high" }) {
 			`  1. ${runDir}/master-spec.md\n` +
 			`  2. ${runDir}/tasks.json\n\n` +
 			"These files MUST exist on disk before you emit the sentinel. " +
-			"Use absolute paths. Prefer Bash (cat > path << 'HEREDOC') for .md files.",
+			"Use absolute paths. Prefer Bash (cat > path << 'HEREDOC') for .md files." +
+			gitInitBlock,
 	};
 }
 

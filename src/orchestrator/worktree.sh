@@ -102,6 +102,24 @@ bootstrap() {
   local src_dir="$1"
   local wt_dir="$2"
 
+  # Ensure MCP tool artifacts are excluded from git in all worktrees.
+  # Uses the repo's .git/info/exclude rather than .gitignore so that:
+  #   - No tracked files are modified (avoids scope violations)
+  #   - The exclusion can't be erased by specialist `git checkout -- .gitignore`
+  #   - Works for all worktrees sharing this repo
+  if is_git_repo; then
+    local git_dir
+    git_dir="$(git -C "$src_dir" rev-parse --git-dir 2>/dev/null)" || true
+    if [ -n "$git_dir" ]; then
+      local exclude="${git_dir}/info/exclude"
+      local marker="# lazy-dev: tool artifacts"
+      if ! grep -qF "$marker" "$exclude" 2>/dev/null; then
+        mkdir -p "$(dirname "$exclude")"
+        printf '\n%s\n.serena/\n.claude/\n' "$marker" >> "$exclude"
+      fi
+    fi
+  fi
+
   # Copy env files (if they exist in the source project).
   for envfile in .env .env.local; do
     if [ -f "${src_dir}/${envfile}" ]; then

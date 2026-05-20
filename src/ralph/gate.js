@@ -15,6 +15,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { getBunGlob } from "./bun-glob.js";
 import {
 	buildRetryPrompt,
 	emitRetry,
@@ -221,30 +222,53 @@ async function main() {
 	}
 
 	// 2. AUTO-COMMIT FALLBACK
-	autoCommit(projectDir, runId, taskId, worktree, log);
+	autoCommit(worktree, taskId, envelope?.scope?.allowed_paths || [], log);
 
 	// 3. SCOPE + DIFF HASH
 	const gitBaseRef = resolveBaseRef(worktree, envelope);
 	const allowedPaths = envelope?.scope?.allowed_paths || [];
-	const scopeResult = checkScope(worktree, gitBaseRef, allowedPaths);
-	const { diffHash, violation } = scopeResult;
+	let scopeResult = checkScope(worktree, gitBaseRef, allowedPaths);
+	let { diffHash, violation } = scopeResult;
 
 	if (scopeResult.error) {
 		log(`scope check error: ${scopeResult.error}`);
 	}
 
 	if (violation) {
-		state.recordIteration({
-			iteration,
-			sentinelKind: "completed",
-			sentinelBody: sentinel.body,
-			verifierResults: [],
-			diffHash,
-			failingSignature: null,
-			notes: `scope violation: ${violation.join(", ")}`,
-		});
-		state.markFailed("out_of_scope", { iteration, files: violation });
-		return;
+		const cleaned = autoCleanOutOfScope(worktree, gitBaseRef, violation, log);
+		if (cleaned) {
+			const recheck = checkScope(worktree, gitBaseRef, allowedPaths);
+			if (!recheck.violation) {
+				log(`auto-cleaned ${violation.length} out-of-scope file(s): ${violation.join(", ")}`);
+				scopeResult = recheck;
+				diffHash = recheck.diffHash;
+				violation = null;
+			} else {
+				state.recordIteration({
+					iteration,
+					sentinelKind: "completed",
+					sentinelBody: sentinel.body,
+					verifierResults: [],
+					diffHash: recheck.diffHash,
+					failingSignature: null,
+					notes: `scope violation after cleanup: ${recheck.violation.join(", ")}`,
+				});
+				state.markFailed("out_of_scope", { iteration, files: recheck.violation });
+				return;
+			}
+		} else {
+			state.recordIteration({
+				iteration,
+				sentinelKind: "completed",
+				sentinelBody: sentinel.body,
+				verifierResults: [],
+				diffHash,
+				failingSignature: null,
+				notes: `scope violation: ${violation.join(", ")}`,
+			});
+			state.markFailed("out_of_scope", { iteration, files: violation });
+			return;
+		}
 	}
 
 	// 4. VERIFIERS — pass precomputed diff data to avoid a redundant git-diff call
@@ -382,10 +406,8 @@ function clearRetryPendingFailure(state) {
 	}
 }
 
-function autoCommit(projectDir, runId, taskId, worktree, log) {
+function autoCommit(worktree, taskId, allowedPaths, log) {
 	try {
-		// Quick check: if git status is clean, skip the subprocess entirely.
-		// This is the common case — specialists almost always commit.
 		const statusOut = execFileSync("git", ["status", "--porcelain"], {
 			cwd: worktree,
 			encoding: "utf8",
@@ -393,22 +415,101 @@ function autoCommit(projectDir, runId, taskId, worktree, log) {
 		}).trim();
 		if (!statusOut) return;
 
-		const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
-		const commitOut = execFileSync(
-			"bash",
-			[
-				join(pluginRoot, "src/orchestrator/worktree.sh"),
-				"commit",
-				runId,
-				taskId,
-				`${taskId}: auto-commit at gate (specialist forgot to commit)`,
-			],
-			{ cwd: projectDir, encoding: "utf8", timeout: 30_000 },
-		).trim();
-		if (commitOut === "committed") {
-			log(`WARN auto-committed for task=${taskId} — specialist skipped commit step`);
+		// Stage only in-scope files: already-tracked modifications/deletions
+		// are always safe to stage; untracked files are only staged if they
+		// match the task's allowed_paths. This prevents MCP tool artifacts
+		// (created by any tool in the agent's environment) from leaking into
+		// the commit and triggering scope violations.
+		execFileSync("git", ["add", "-u"], { cwd: worktree, stdio: "ignore", timeout: 10_000 });
+
+		const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], {
+			cwd: worktree,
+			encoding: "utf8",
+			timeout: 10_000,
+		})
+			.trim()
+			.split("\n")
+			.filter(Boolean);
+
+		if (untracked.length > 0) {
+			if (allowedPaths.length > 0) {
+				const G = getBunGlob();
+				const allowed = allowedPaths.map((p) => new G(p));
+				const inScope = untracked.filter((f) => allowed.some((g) => g.match(f)));
+				if (inScope.length > 0) {
+					execFileSync("git", ["add", "--", ...inScope], {
+						cwd: worktree,
+						stdio: "ignore",
+						timeout: 10_000,
+					});
+				}
+			} else {
+				execFileSync("git", ["add", "-A"], { cwd: worktree, stdio: "ignore", timeout: 10_000 });
+			}
 		}
+
+		let hasStaged = false;
+		try {
+			execFileSync("git", ["diff", "--cached", "--quiet"], {
+				cwd: worktree,
+				stdio: "ignore",
+				timeout: 10_000,
+			});
+		} catch {
+			hasStaged = true;
+		}
+		if (!hasStaged) return;
+
+		execFileSync(
+			"git",
+			["commit", "-m", `${taskId}: auto-commit at gate (specialist forgot to commit)`],
+			{ cwd: worktree, stdio: "ignore", timeout: 30_000 },
+		);
+		log(`WARN auto-committed for task=${taskId} — specialist skipped commit step`);
 	} catch (err) {
 		log(`auto-commit skipped for ${taskId}: ${err.message}`);
+	}
+}
+
+function autoCleanOutOfScope(worktree, gitBaseRef, violatingFiles, log) {
+	if (!gitBaseRef) return false;
+	const safeFiles = violatingFiles.filter((f) => {
+		const resolved = join(worktree, f);
+		return resolved.startsWith(worktree) && !f.includes("..");
+	});
+	if (safeFiles.length === 0) return false;
+	try {
+		// Revert only the out-of-scope files back to the base ref state.
+		// For files that didn't exist at the base (new files added by the
+		// specialist or by a tool), this removes them from the index.
+		execFileSync("git", ["checkout", gitBaseRef, "--", ...safeFiles], {
+			cwd: worktree,
+			stdio: ["ignore", "pipe", "pipe"],
+			timeout: 10_000,
+		});
+		execFileSync(
+			"git",
+			["commit", "--allow-empty", "-m", "lazy-dev: auto-revert out-of-scope files"],
+			{ cwd: worktree, stdio: "ignore", timeout: 10_000 },
+		);
+		return true;
+	} catch {
+		// Files may not exist at the base ref (newly created). Try rm instead.
+		try {
+			execFileSync("git", ["rm", "--cached", "-f", "--", ...safeFiles], {
+				cwd: worktree,
+				stdio: ["ignore", "pipe", "pipe"],
+				timeout: 10_000,
+			});
+			execFileSync(
+				"git",
+				["commit", "--allow-empty", "-m", "lazy-dev: auto-remove out-of-scope files"],
+				{ cwd: worktree, stdio: "ignore", timeout: 10_000 },
+			);
+			return true;
+		} catch (err) {
+			log(`auto-clean failed: ${err.message}`);
+			return false;
+		}
 	}
 }

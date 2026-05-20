@@ -12,7 +12,17 @@
 // CLI:
 //   node src/orchestrator/plan-next.js <run-id>
 
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
@@ -73,24 +83,30 @@ function planPhase(ctx) {
 	const { runDir, runId, projectDir } = ctx;
 	const masterSpec = join(runDir, "master-spec.md");
 	const tasksJson = join(runDir, "tasks.json");
+	let reusedFrom = null;
 	if (!existsSync(masterSpec) || !existsSync(tasksJson)) {
-		const plannerCalls = countPlannerCalls(projectDir, runId);
-		if (plannerCalls >= 2) {
-			const missing = [];
-			if (!existsSync(masterSpec)) missing.push("master-spec.md");
-			if (!existsSync(tasksJson)) missing.push("tasks.json");
-			return {
-				phase: "error",
-				action: "surface",
-				detail:
-					`Planner has run ${plannerCalls} time(s) without producing ${missing.join(" and ")}. ` +
-					"The planner agent is not persisting files with the Write tool. " +
-					"Write these files manually from the planner's output, then call plan_next again.",
-			};
-		}
+		const reused = tryReuseSiblingPlan(runDir, runId, projectDir);
+		if (reused) {
+			reusedFrom = reused.reused_from;
+		} else {
+			const plannerCalls = countPlannerCalls(projectDir, runId);
+			if (plannerCalls >= 2) {
+				const missing = [];
+				if (!existsSync(masterSpec)) missing.push("master-spec.md");
+				if (!existsSync(tasksJson)) missing.push("tasks.json");
+				return {
+					phase: "error",
+					action: "surface",
+					detail:
+						`Planner has run ${plannerCalls} time(s) without producing ${missing.join(" and ")}. ` +
+						"The planner agent is not persisting files with the Write tool. " +
+						"Write these files manually from the planner's output, then call plan_next again.",
+				};
+			}
 
-		const warning = checkBudgetWarning(ctx);
-		return { phase: "plan", action: "dispatch_planner", warning };
+			const warning = checkBudgetWarning(ctx);
+			return { phase: "plan", action: "dispatch_planner", warning };
+		}
 	}
 	const plan = readJsonSafe(tasksJson);
 	const cfg = readRunConfig(projectDir, runId);
@@ -116,6 +132,7 @@ function planPhase(ctx) {
 	const summary = buildGateSummary(runId, masterSpec, tasksJson, tasks);
 	advancePhase(ctx, "approve");
 	const gateResponse = { phase: "approve", action: "show_gate", summary };
+	if (reusedFrom) gateResponse.reused_from = reusedFrom;
 	if (result.warnings?.length) gateResponse.warnings = result.warnings;
 	return gateResponse;
 }
@@ -237,6 +254,18 @@ function reviewPhase(ctx) {
 			.filter(([, v]) => v === "CHANGES_REQUESTED")
 			.map(([id]) => id);
 
+		if (needsRetry.length === 0) {
+			return {
+				phase: "review",
+				action: "surface_review",
+				detail:
+					"Reviewer found gaps (likely brief compliance) that don't map to specific tasks. " +
+					"Read review.md for details — the Brief Compliance section lists what's missing. " +
+					"You can retry specific tasks with retry_tasks or cancel the run.",
+				review_path: reviewPath,
+			};
+		}
+
 		if (currentPass >= maxRetries) {
 			return {
 				phase: "review",
@@ -322,6 +351,47 @@ function checkBudgetWarning(ctx) {
 	}
 	if (pct >= warnPct) {
 		return `output tokens at ${pct.toFixed(0)}% of per-run cap (${usage.totals.output_tokens} of ${runCap.max_output_tokens})`;
+	}
+	return null;
+}
+
+// ── plan reuse ─────────────────────────────────────────────────────────────
+
+function tryReuseSiblingPlan(runDir, runId, projectDir) {
+	const runsDir = join(projectDir, ".lazy-dev", "runs");
+	if (!existsSync(runsDir)) return null;
+
+	let entries;
+	try {
+		entries = readdirSync(runsDir)
+			.filter((e) => e !== "_gate-log" && e !== runId && !e.startsWith("."))
+			.sort((a, b) => (a > b ? -1 : a < b ? 1 : 0));
+	} catch {
+		return null;
+	}
+
+	for (const e of entries) {
+		const siblingDir = join(runsDir, e);
+		try {
+			if (lstatSync(siblingDir).isSymbolicLink()) continue;
+		} catch {
+			continue;
+		}
+		const siblingSpec = join(siblingDir, "master-spec.md");
+		const siblingTasks = join(siblingDir, "tasks.json");
+		if (!existsSync(siblingSpec) || !existsSync(siblingTasks)) continue;
+
+		const siblingStatus = readJsonSafe(join(siblingDir, "status.json"));
+		if (!siblingStatus) continue;
+		const phase = siblingStatus.phase;
+		if (phase !== "cancelled" && phase !== "done") continue;
+
+		const plan = readJsonSafe(siblingTasks);
+		if (!plan?.tasks?.length) continue;
+
+		copyFileSync(siblingSpec, join(runDir, "master-spec.md"));
+		copyFileSync(siblingTasks, join(runDir, "tasks.json"));
+		return { reused_from: e };
 	}
 	return null;
 }

@@ -13,7 +13,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { withGitLock } from "../mcp/_git-lock.js";
 import { atomicWrite, readJsonSafe } from "../mcp/_io.js";
 import { withRunLock } from "../mcp/_lock.js";
@@ -71,66 +71,126 @@ export function dispatch({ runId, taskId, projectDir }) {
 
 	const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || projectDir;
 
-	// Git operations (dep merges + worktree creation) modify the main worktree.
-	// Serialized via a project-level git lock to prevent concurrent dispatches
-	// from colliding on git index/stash state.
-	const worktreePath = withGitLock(projectDir, () => {
-		for (const depId of deps) {
-			try {
-				execFileSync(
-					"bash",
-					[join(pluginRoot, "src/orchestrator/worktree.sh"), "merge", runId, depId],
-					{
-						encoding: "utf8",
-						cwd: projectDir,
-						stdio: ["ignore", "pipe", "pipe"],
-						timeout: 10 * 60_000,
-						maxBuffer: 10 * 1024 * 1024,
-					},
-				);
-			} catch (err) {
-				if (err.status === 3) {
-					const conflictFiles = (err.stdout || "")
-						.split("\n")
-						.map((l) => l.trim())
-						.filter(Boolean);
+	// On re-dispatch (retry), collect stale worktree/branch info for cleanup.
+	// Actual cleanup happens inside withGitLock to prevent races with concurrent merges.
+	const isRedispatch = existsSync(join(runDir, "tasks", taskId, "envelope.json"));
+	let staleWorktree = null;
+	let staleBranch = null;
+	if (isRedispatch) {
+		const prevEnvelope = readJsonSafe(join(runDir, "tasks", taskId, "envelope.json"));
+		const oldWorktree = prevEnvelope?.worktree_path;
+		const oldBranch = prevEnvelope?.worktree_branch;
+		const lazyDevPrefix = resolve(join(projectDir, ".lazy-dev"));
+		if (
+			oldWorktree &&
+			oldWorktree !== projectDir &&
+			resolve(oldWorktree).startsWith(lazyDevPrefix) &&
+			existsSync(oldWorktree)
+		) {
+			staleWorktree = oldWorktree;
+		}
+		if (oldBranch && /^[a-zA-Z0-9_./~^@{}-]+$/.test(oldBranch)) {
+			staleBranch = oldBranch;
+		}
+	}
+
+	// git_init tasks run directly in the project directory — no worktree
+	// creation (git doesn't exist yet, that's the whole point of the task).
+	const isGitInit = !!task.git_init;
+	const worktreePath = isGitInit
+		? projectDir
+		: withGitLock(projectDir, () => {
+				// Clean up stale worktree + branch inside the git lock to prevent
+				// races with concurrent merge operations.
+				if (staleWorktree) {
 					try {
-						execFileSync("git", ["merge", "--abort"], {
+						execFileSync("git", ["worktree", "remove", "--force", staleWorktree], {
 							cwd: projectDir,
-							stdio: "ignore",
-							timeout: 10_000,
+							stdio: ["ignore", "pipe", "pipe"],
+							timeout: 30_000,
 						});
 					} catch {
+						rmSync(staleWorktree, { recursive: true, force: true });
 						try {
-							execFileSync("git", ["reset", "--hard", "HEAD"], {
+							execFileSync("git", ["worktree", "prune"], {
 								cwd: projectDir,
 								stdio: "ignore",
 								timeout: 10_000,
 							});
 						} catch {}
 					}
-					throw Object.assign(
-						new Error(
-							`cannot dispatch ${taskId}: merging dependency ${depId} produced conflicts in: ${conflictFiles.join(", ")}. Resolve the conflicts in your main branch (between ${depId}'s changes and current state), then retry the dispatch.`,
-						),
-						{ dep_conflict: true, dep_id: depId, task_id: taskId, conflicted_files: conflictFiles },
-					);
 				}
-				throw new Error(`failed to merge dependency ${depId}: ${err.message}`);
-			}
-		}
+				if (staleBranch) {
+					try {
+						execFileSync("git", ["branch", "-D", staleBranch], {
+							cwd: projectDir,
+							stdio: ["ignore", "pipe", "pipe"],
+							timeout: 10_000,
+						});
+					} catch {}
+				}
 
-		return execFileSync(
-			"bash",
-			[join(pluginRoot, "src/orchestrator/worktree.sh"), "create", runId, taskId],
-			{
-				encoding: "utf8",
-				cwd: projectDir,
-				timeout: 2 * 60_000,
-				maxBuffer: 1 * 1024 * 1024,
-			},
-		).trim();
-	});
+				for (const depId of deps) {
+					try {
+						execFileSync(
+							"bash",
+							[join(pluginRoot, "src/orchestrator/worktree.sh"), "merge", runId, depId],
+							{
+								encoding: "utf8",
+								cwd: projectDir,
+								stdio: ["ignore", "pipe", "pipe"],
+								timeout: 10 * 60_000,
+								maxBuffer: 10 * 1024 * 1024,
+							},
+						);
+					} catch (err) {
+						if (err.status === 3) {
+							const conflictFiles = (err.stdout || "")
+								.split("\n")
+								.map((l) => l.trim())
+								.filter(Boolean);
+							try {
+								execFileSync("git", ["merge", "--abort"], {
+									cwd: projectDir,
+									stdio: "ignore",
+									timeout: 10_000,
+								});
+							} catch {
+								try {
+									execFileSync("git", ["reset", "--hard", "HEAD"], {
+										cwd: projectDir,
+										stdio: "ignore",
+										timeout: 10_000,
+									});
+								} catch {}
+							}
+							throw Object.assign(
+								new Error(
+									`cannot dispatch ${taskId}: merging dependency ${depId} produced conflicts in: ${conflictFiles.join(", ")}. Resolve the conflicts in your main branch (between ${depId}'s changes and current state), then retry the dispatch.`,
+								),
+								{
+									dep_conflict: true,
+									dep_id: depId,
+									task_id: taskId,
+									conflicted_files: conflictFiles,
+								},
+							);
+						}
+						throw new Error(`failed to merge dependency ${depId}: ${err.message}`);
+					}
+				}
+
+				return execFileSync(
+					"bash",
+					[join(pluginRoot, "src/orchestrator/worktree.sh"), "create", runId, taskId],
+					{
+						encoding: "utf8",
+						cwd: projectDir,
+						timeout: 2 * 60_000,
+						maxBuffer: 1 * 1024 * 1024,
+					},
+				).trim();
+			});
 
 	// Write envelope under lock (fast — no subprocesses).
 	return withRunLock(runDir, () => {
@@ -139,13 +199,13 @@ export function dispatch({ runId, taskId, projectDir }) {
 		const envelopePath = join(taskDir, "envelope.json");
 		const dispatchedAt = new Date().toISOString();
 		const sanitized = taskId.replace(/[^A-Za-z0-9_-]/g, "_");
-		const worktreeBranch = `lazy-dev/${runId}/${sanitized}`;
+		const worktreeBranch = isGitInit ? undefined : `lazy-dev/${runId}/${sanitized}`;
 		const envelopeBody = {
 			...task,
 			run_id: runId,
 			task_id: taskId,
 			worktree_path: worktreePath,
-			worktree_branch: worktreeBranch,
+			...(worktreeBranch ? { worktree_branch: worktreeBranch } : {}),
 			dispatched_at: dispatchedAt,
 		};
 		if (!existsSync(envelopePath)) {

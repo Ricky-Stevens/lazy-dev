@@ -238,6 +238,119 @@ describe("dispatch — reviewer notes on retry", () => {
 	});
 });
 
+describe("dispatch — re-dispatch removes stale worktree", () => {
+	test("re-dispatch creates a fresh worktree from current HEAD", () => {
+		const pluginRoot = resolve(import.meta.dirname, "..", "..");
+		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+		try {
+			setupDispatchRun("run-redispatch-fresh", [
+				{ id: "T-0001", agent: "code-small", title: "Freshness test" },
+			]);
+
+			const result1 = dispatch({ runId: "run-redispatch-fresh", taskId: "T-0001", projectDir });
+			expect(existsSync(result1.worktree)).toBe(true);
+
+			writeFileSync(join(result1.worktree, "stale-marker.txt"), "old");
+
+			const result2 = dispatch({ runId: "run-redispatch-fresh", taskId: "T-0001", projectDir });
+			expect(existsSync(result2.worktree)).toBe(true);
+			expect(existsSync(join(result2.worktree, "stale-marker.txt"))).toBe(false);
+		} finally {
+			if (savedPR !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPR;
+			else delete process.env.CLAUDE_PLUGIN_ROOT;
+		}
+	});
+});
+
+describe("dispatch — path prefix guard on re-dispatch", () => {
+	test("does not delete worktree_path outside .lazy-dev/", () => {
+		const pluginRoot = resolve(import.meta.dirname, "..", "..");
+		const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
+		process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+		try {
+			setupDispatchRun("run-path-guard", [
+				{ id: "T-0001", agent: "code-small", title: "Path guard test" },
+			]);
+			const taskDir = join(projectDir, ".lazy-dev", "runs", "run-path-guard", "tasks", "T-0001");
+			mkdirSync(taskDir, { recursive: true });
+
+			const dangerDir = join(projectDir, "important-data");
+			mkdirSync(dangerDir, { recursive: true });
+			writeFileSync(join(dangerDir, "file.txt"), "precious");
+
+			writeFileSync(
+				join(taskDir, "envelope.json"),
+				JSON.stringify({
+					id: "T-0001",
+					agent: "code-small",
+					dispatched_at: "2025-01-01T00:00:00Z",
+					worktree_path: dangerDir,
+					worktree_branch: "lazy-dev/run-path-guard/T_0001",
+				}),
+			);
+
+			dispatch({ runId: "run-path-guard", taskId: "T-0001", projectDir });
+			expect(existsSync(join(dangerDir, "file.txt"))).toBe(true);
+		} finally {
+			if (savedPR !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPR;
+			else delete process.env.CLAUDE_PLUGIN_ROOT;
+		}
+	});
+});
+
+describe("dispatch — git_init task skips worktree", () => {
+	test("git_init task uses projectDir directly instead of creating a worktree", () => {
+		const noGitDir = mkdtempSync(join(tmpdir(), "dispatch-no-git-"));
+		try {
+			const runId = "run-git-init";
+			const runDir = join(noGitDir, ".lazy-dev", "runs", runId);
+			mkdirSync(runDir, { recursive: true });
+			writeFileSync(
+				join(runDir, "tasks.json"),
+				JSON.stringify({
+					tasks: [
+						{
+							id: "T-0001",
+							agent: "code-small",
+							git_init: true,
+							title: "Git init",
+							goal: "Initialize git",
+							details: "Run git init",
+							scope: { allowed_paths: [".gitignore"] },
+							completion_criteria: [
+								{ id: "git_exists", kind: "shell", cmd: "git rev-parse --git-dir", must_exit: 0 },
+							],
+						},
+					],
+				}),
+			);
+			writeFileSync(
+				join(runDir, "status.json"),
+				JSON.stringify({ run_id: runId, phase: "specialists" }),
+			);
+
+			const pluginRoot = resolve(import.meta.dirname, "..", "..");
+			const savedPR = process.env.CLAUDE_PLUGIN_ROOT;
+			process.env.CLAUDE_PLUGIN_ROOT = pluginRoot;
+			try {
+				const result = dispatch({ runId, taskId: "T-0001", projectDir: noGitDir });
+				expect(result.worktree).toBe(noGitDir);
+				expect(result.agent).toBe("code-small");
+				expect(existsSync(result.envelope_path)).toBe(true);
+
+				const envelope = JSON.parse(readFileSync(result.envelope_path, "utf8"));
+				expect(envelope.worktree_branch).toBeUndefined();
+			} finally {
+				if (savedPR !== undefined) process.env.CLAUDE_PLUGIN_ROOT = savedPR;
+				else delete process.env.CLAUDE_PLUGIN_ROOT;
+			}
+		} finally {
+			rmSync(noGitDir, { recursive: true, force: true });
+		}
+	});
+});
+
 describe("dispatch CLI", () => {
 	test("CLI returns usage error without args", () => {
 		const result = spawnSync("node", [CLI_PATH], {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PLANNER_EFFORTS, plannerDispatch } from "./planner-dispatch.js";
@@ -58,6 +58,37 @@ describe("plannerDispatch effort routing", () => {
 	test("throws if brief.md missing", () => {
 		rmSync(join(projectDir, ".lazy-dev", "runs", runId, "brief.md"));
 		expect(() => plannerDispatch({ runId, projectDir })).toThrow(/brief missing/);
+	});
+});
+
+describe("plannerDispatch git-init detection", () => {
+	test("includes git-init instructions when status has needs_git_init", () => {
+		const runDir = join(projectDir, ".lazy-dev", "runs", runId);
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "plan", needs_git_init: true }),
+		);
+		const r = plannerDispatch({ runId, projectDir });
+		expect(r.dispatch_prompt).toContain("GIT INIT REQUIRED");
+		expect(r.dispatch_prompt).toContain('"git_init": true');
+		expect(r.dispatch_prompt).toContain("skip worktree creation");
+	});
+
+	test("clears needs_git_init from status.json after reading it", () => {
+		const runDir = join(projectDir, ".lazy-dev", "runs", runId);
+		writeFileSync(
+			join(runDir, "status.json"),
+			JSON.stringify({ run_id: runId, phase: "plan", needs_git_init: true }),
+		);
+		plannerDispatch({ runId, projectDir });
+		const status = JSON.parse(readFileSync(join(runDir, "status.json"), "utf8"));
+		expect(status.needs_git_init).toBeUndefined();
+		expect(status.phase).toBe("plan");
+	});
+
+	test("does not include git-init instructions when needs_git_init is absent", () => {
+		const r = plannerDispatch({ runId, projectDir });
+		expect(r.dispatch_prompt).not.toContain("GIT INIT REQUIRED");
 	});
 });
 
